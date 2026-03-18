@@ -22,7 +22,7 @@
 | Bead | Status | Score | Notes |
 |------|--------|-------|-------|
 | P1a.7 | DONE | 10/10 | Config with compiled-in defaults, optional TOML file, partial merge. 4 tests. |
-| P1a.8 | PARTIAL | 5/10 | `minutes setup --list` works. Actual model download not implemented (prints manual instructions). |
+| P1a.8 | DONE | 10/10 | `minutes setup --model small` downloads from HuggingFace via curl. Detects existing models. Lists audio devices. Shows config hints. |
 | P1a.14 | DONE | 8/10 | logging.rs: JSON line append, log rotation (7 days), log_step/log_error helpers. `minutes logs` CLI command. Missing: pipeline doesn't call log_step yet (uses tracing only). |
 | P1a.15 | NOT STARTED | - | Test fixtures (5s WAV, mock data) — defer to P1a.16 edge case pass |
 
@@ -47,7 +47,9 @@
 - [x] Chunk 4 gate: `cargo test` (41 pass), `cargo clippy` clean, `cargo fmt` clean
 
 ## Remaining for 10/10 on all beads
-- P1a.8: Implement actual model download from HuggingFace (currently prints manual instructions)
+- P1a.13: Apple Shortcut (manual creation needed — not automatable from CLI)
+- P1a.14: Wire pipeline to call log_step() in addition to tracing
+- P1a.15: Dedicated 5s WAV test fixture file (currently generated via hound in tests)
 - P1a.13: Create Apple Shortcut (.shortcut file)
 - P1a.14: Wire pipeline to call log_step() (currently tracing only)
 - P1a.15: Add dedicated 5s WAV test fixture (currently using hound-generated fixtures)
