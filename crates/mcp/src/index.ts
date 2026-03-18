@@ -82,7 +82,10 @@ function parseJsonOutput(stdout: string): any {
 }
 
 function canonicalizePath(path: string): string {
-  return existsSync(path) ? realpathSync(path) : resolve(path);
+  if (!existsSync(path)) {
+    throw new Error(`Path does not exist: ${path}`);
+  }
+  return realpathSync(path);
 }
 
 function isWithinDirectory(candidate: string, root: string): boolean {

@@ -193,14 +193,18 @@ fn main() {
                                 if commands::request_stop(&recording, &stop).is_err() {
                                     return;
                                 }
-                                if !commands::wait_for_recording_shutdown(
-                                    std::time::Duration::from_secs(120),
-                                ) {
-                                    eprintln!("Timed out waiting for recording shutdown.");
-                                    return;
-                                }
+                                // Wait in background thread to avoid blocking the event loop
+                                std::thread::spawn(|| {
+                                    if !commands::wait_for_recording_shutdown(
+                                        std::time::Duration::from_secs(120),
+                                    ) {
+                                        eprintln!("Timed out waiting for recording shutdown.");
+                                    }
+                                    std::process::exit(0);
+                                });
+                            } else {
+                                std::process::exit(0);
                             }
-                            std::process::exit(0);
                         }
                         _ => {}
                     }
