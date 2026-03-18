@@ -1,9 +1,11 @@
 pub mod config;
 pub mod error;
+pub mod logging;
 pub mod markdown;
 pub mod pid;
 pub mod pipeline;
 pub mod search;
+pub mod watch;
 
 // Re-export commonly used types
 pub use config::Config;

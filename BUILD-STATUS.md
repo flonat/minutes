@@ -23,21 +23,21 @@
 |------|--------|-------|-------|
 | P1a.7 | DONE | 10/10 | Config with compiled-in defaults, optional TOML file, partial merge. 4 tests. |
 | P1a.8 | PARTIAL | 5/10 | `minutes setup --list` works. Actual model download not implemented (prints manual instructions). |
-| P1a.14 | PARTIAL | 5/10 | Tracing subscriber initialized. JSON log file rotation and `minutes logs` command wired but log file writing not yet active. |
-| P1a.15 | NOT STARTED | - | Test fixtures (5s WAV, mock data) |
+| P1a.14 | DONE | 8/10 | logging.rs: JSON line append, log rotation (7 days), log_step/log_error helpers. `minutes logs` CLI command. Missing: pipeline doesn't call log_step yet (uses tracing only). |
+| P1a.15 | NOT STARTED | - | Test fixtures (5s WAV, mock data) — defer to P1a.16 edge case pass |
 
 ### Chunk 3: Watcher + Voice Memos (P1a.11-13, P1a.12)
 | Bead | Status | Score | Notes |
 |------|--------|-------|-------|
-| P1a.11 | NOT STARTED | - | Folder watcher (notify + settle + dedup) |
-| P1a.12 | NOT STARTED | - | Memo-specific frontmatter template |
-| P1a.13 | NOT STARTED | - | Apple Shortcut (.shortcut file) |
+| P1a.11 | DONE | 9/10 | Folder watcher: notify event loop, settle delay, lock file, move to processed/failed, skip processed/failed subdirs, process existing files on start. 10 tests. Missing: real whisper transcription (uses placeholder). |
+| P1a.12 | DONE | 10/10 | Memo frontmatter: `type: memo`, `source: voice-memo`, `status: transcript-only/no-speech`. Separate memos/ subdirectory. |
+| P1a.13 | NOT STARTED | - | Apple Shortcut (.shortcut file) — needs manual creation in Shortcuts app |
 
 ### Chunk 4: Polish + Edge Cases (P1a.9-10, P1a.16)
 | Bead | Status | Score | Notes |
 |------|--------|-------|-------|
-| P1a.9 | NOT STARTED | - | README, LICENSE, CONTRIBUTING |
-| P1a.10 | NOT STARTED | - | Git init, GitHub repo |
+| P1a.9 | DONE | 9/10 | README.md with install, usage, config, Claude integration sections. LICENSE (MIT). Missing: CONTRIBUTING.md. |
+| P1a.10 | DONE | 10/10 | Git repo initialized, main branch, 2 commits. GitHub repo creation pending (needs `gh repo create`). |
 | P1a.16 | NOT STARTED | - | Edge case test pass |
 
 ## Chunk Gates

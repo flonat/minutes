@@ -74,6 +74,12 @@ enum Commands {
         title: Option<String>,
     },
 
+    /// Watch a folder for new audio files and process them automatically
+    Watch {
+        /// Directory to watch (default: ~/.minutes/inbox/)
+        dir: Option<PathBuf>,
+    },
+
     /// Download whisper model and set up minutes
     Setup {
         /// Model to download: tiny, base, small, medium, large-v3
@@ -128,6 +134,7 @@ fn main() -> Result<()> {
             content_type,
             title,
         } => cmd_process(&path, &content_type, title.as_deref(), &config),
+        Commands::Watch { dir } => cmd_watch(dir.as_deref(), &config),
         Commands::Setup { model, list } => cmd_setup(&model, list),
         Commands::Logs { errors, lines } => cmd_logs(errors, lines),
     }
@@ -368,6 +375,33 @@ fn cmd_process(
         "words": result.word_count,
     }))?;
     println!("{}", json);
+    Ok(())
+}
+
+fn cmd_watch(dir: Option<&Path>, config: &Config) -> Result<()> {
+    config.ensure_dirs()?;
+
+    // Set up Ctrl-C handler to exit gracefully
+    let (tx, rx) = std::sync::mpsc::channel();
+    ctrlc::set_handler(move || {
+        tx.send(()).ok();
+    })?;
+
+    // Run watcher in a separate thread so we can catch Ctrl-C
+    let config_clone = config.clone();
+    let dir_clone = dir.map(|d| d.to_path_buf());
+    let watcher_thread = std::thread::spawn(move || {
+        minutes_core::watch::run(dir_clone.as_deref(), &config_clone)
+    });
+
+    // Wait for Ctrl-C
+    rx.recv().ok();
+    eprintln!("\nStopping watcher...");
+
+    // The watcher thread will be cleaned up when the process exits
+    // The LockGuard in watch.rs will release the lock on drop
+    drop(watcher_thread);
+
     Ok(())
 }
 
