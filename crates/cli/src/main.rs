@@ -415,12 +415,61 @@ fn cmd_setup(model: &str, list: bool) -> Result<()> {
         );
     }
 
-    // TODO(P1a.8): Implement actual model download from huggingface
-    eprintln!("Model download not yet implemented.");
-    eprintln!("For now, manually download the {} model from:", model);
-    eprintln!("  https://huggingface.co/ggerganov/whisper.cpp/tree/main");
-    eprintln!("Place the ggml-{}.bin file in:", model);
-    eprintln!("  {}", Config::default().transcription.model_path.display());
+    let config = Config::default();
+    let model_dir = &config.transcription.model_path;
+    std::fs::create_dir_all(model_dir)?;
+
+    let dest = model_dir.join(format!("ggml-{}.bin", model));
+    if dest.exists() {
+        let size = std::fs::metadata(&dest)?.len();
+        eprintln!(
+            "Model already downloaded: {} ({:.0} MB)",
+            dest.display(),
+            size as f64 / 1_048_576.0
+        );
+        return Ok(());
+    }
+
+    let url = format!(
+        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{}.bin",
+        model
+    );
+
+    eprintln!("Downloading whisper model: {} ...", model);
+    eprintln!("  From: {}", url);
+    eprintln!("  To:   {}", dest.display());
+
+    // Use curl for the download (available on all macOS systems)
+    let status = std::process::Command::new("curl")
+        .args(["-L", "-o", dest.to_str().unwrap(), &url, "--progress-bar"])
+        .status()?;
+
+    if !status.success() {
+        // Clean up partial download
+        std::fs::remove_file(&dest).ok();
+        anyhow::bail!("download failed. Check your internet connection and try again.");
+    }
+
+    let size = std::fs::metadata(&dest)?.len();
+    eprintln!(
+        "\nDone! Model saved to {} ({:.0} MB)",
+        dest.display(),
+        size as f64 / 1_048_576.0
+    );
+
+    // Update config hint
+    eprintln!("\nTo use this model, add to ~/.config/minutes/config.toml:");
+    eprintln!("  [transcription]");
+    eprintln!("  model = \"{}\"", model);
+
+    // Also list available input devices
+    let devices = minutes_core::capture::list_input_devices();
+    if !devices.is_empty() {
+        eprintln!("\nAvailable audio input devices:");
+        for d in &devices {
+            eprintln!("  {}", d);
+        }
+    }
 
     Ok(())
 }
