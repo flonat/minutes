@@ -3,7 +3,7 @@
 > This file tracks implementation progress. Read this after compaction to know exactly where you left off.
 > Update this file after completing each bead. Never leave it stale.
 
-## Current Phase: 1a — Recording Pipeline
+## Current Phase: 1b — Intelligence Layer (diarization + summarization)
 
 ## Build Chunks
 
@@ -66,6 +66,17 @@
 - `minutes status` — shows recording status (JSON)
 - `minutes watch` — watches folder for new audio files
 - `minutes setup --list` — shows available whisper models
+
+### Phase 1b: Intelligence Layer
+| Bead | Status | Score | Notes |
+|------|--------|-------|-------|
+| P1b.1 | DONE | 9/10 | Diarization via pyannote subprocess. Speaker segment parsing, apply_speakers() for transcript labeling. Graceful fallback. 6 tests. |
+| P1b.2 | NOT STARTED | - | Speaker-to-name mapping (calendar attendees → speaker labels) |
+| P1b.3 | DONE | 9/10 | LLM summarization: Claude, OpenAI, Ollama engines. Map-reduce chunking. Structured output (key points, decisions, action items). 6 tests. |
+| P1b.4 | DONE | 9/10 | Summary template with markdown sections (## Decisions, ## Action Items with checkboxes) |
+| P1b.5 | NOT STARTED | - | Calendar integration (ical file parsing) |
+| P1b.6 | DONE | 10/10 | Already built in Phase 1a (search + list commands) |
+| P1b.7 | NOT STARTED | - | End-to-end test with real meeting audio |
 
 ## Resume Instructions (for post-compaction)
 1. Read this file to see current status
