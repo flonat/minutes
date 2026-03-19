@@ -61,6 +61,7 @@ pub struct StaleCommitment {
     pub entry: ReportEntry,
     pub meetings_since: usize,
     pub age_days: i64,
+    pub reasons: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -260,7 +261,20 @@ pub fn consistency_report(
                 .count();
             let age_days = now.signed_duration_since(frontmatter.date).num_days();
 
-            if age_days >= stale_after_days || meetings_since >= 3 {
+            let mut reasons = Vec::new();
+            if age_days >= stale_after_days {
+                reasons.push(format!("{} days old", age_days));
+            }
+            if meetings_since >= 3 {
+                reasons.push(format!("{} newer meetings since", meetings_since));
+            }
+            if let Some(by_date) = &intent.by_date {
+                if meetings_since >= 1 || age_days >= 1 {
+                    reasons.push(format!("still open with due date {}", by_date));
+                }
+            }
+
+            if !reasons.is_empty() {
                 stale_commitments.push(StaleCommitment {
                     kind: intent.kind,
                     entry: ReportEntry {
@@ -273,6 +287,7 @@ pub fn consistency_report(
                     },
                     meetings_since,
                     age_days,
+                    reasons,
                 });
             }
         }
@@ -947,6 +962,18 @@ mod tests {
             Some("case")
         );
         assert!(report.stale_commitments[0].meetings_since >= 3);
+        assert!(report.stale_commitments[0]
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("days old")));
+        assert!(report.stale_commitments[0]
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("newer meetings since")));
+        assert!(report.stale_commitments[0]
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("still open with due date March 8")));
     }
 
     #[test]

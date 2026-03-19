@@ -585,10 +585,12 @@ fn cmd_consistency(owner: Option<&str>, stale_after_days: i64, config: &Config) 
         for stale in &report.stale_commitments {
             let who = stale.entry.who.as_deref().unwrap_or("unassigned");
             let due = stale.entry.by_date.as_deref().unwrap_or("no due date");
+            let reasons = stale.reasons.join(", ");
             eprintln!(
                 "  {:?}: {} (@{}, {}, {} days old, {} meetings since)",
                 stale.kind, stale.entry.what, who, due, stale.age_days, stale.meetings_since
             );
+            eprintln!("    why: {}", reasons);
             eprintln!("  from: {} — {}", stale.entry.date, stale.entry.title);
             eprintln!("  {}", stale.entry.path.display());
         }
