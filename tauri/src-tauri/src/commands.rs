@@ -8,6 +8,7 @@ pub struct AppState {
     pub stop_flag: Arc<AtomicBool>,
     pub processing: Arc<AtomicBool>,
     pub processing_stage: Arc<Mutex<Option<String>>>,
+    pub latest_output: Arc<Mutex<Option<OutputNotice>>>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -28,6 +29,14 @@ pub struct MeetingDetail {
     pub attendees: Vec<String>,
     pub calendar_event: Option<String>,
     pub sections: Vec<MeetingSection>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct OutputNotice {
+    pub kind: String,
+    pub title: String,
+    pub path: String,
+    pub detail: String,
 }
 
 fn preserve_failed_capture(wav_path: &std::path::Path, config: &Config) -> Option<PathBuf> {
@@ -116,6 +125,15 @@ fn set_processing_stage(stage: &Arc<Mutex<Option<String>>>, value: Option<&str>)
     }
 }
 
+fn set_latest_output(
+    latest_output: &Arc<Mutex<Option<OutputNotice>>>,
+    notice: Option<OutputNotice>,
+) {
+    if let Ok(mut current) = latest_output.lock() {
+        *current = notice;
+    }
+}
+
 fn parse_sections(body: &str) -> Vec<MeetingSection> {
     let mut sections = Vec::new();
     let mut current_heading: Option<String> = None;
@@ -153,11 +171,13 @@ pub fn start_recording(
     stop_flag: Arc<AtomicBool>,
     processing: Arc<AtomicBool>,
     processing_stage: Arc<Mutex<Option<String>>>,
+    latest_output: Arc<Mutex<Option<OutputNotice>>>,
 ) {
     recording.store(true, Ordering::Relaxed);
     stop_flag.store(false, Ordering::Relaxed);
     processing.store(false, Ordering::Relaxed);
     set_processing_stage(&processing_stage, None);
+    set_latest_output(&latest_output, None);
 
     let config = Config::load();
     let wav_path = minutes_core::pid::current_wav_path();
@@ -188,6 +208,15 @@ pub fn start_recording(
             ) {
                 Ok(result) => {
                     remove_current_wav = true;
+                    set_latest_output(
+                        &latest_output,
+                        Some(OutputNotice {
+                            kind: "saved".into(),
+                            title: result.title.clone(),
+                            path: result.path.display().to_string(),
+                            detail: "Saved meeting markdown".into(),
+                        }),
+                    );
                     eprintln!(
                         "Saved: {} ({} words)",
                         result.path.display(),
@@ -196,6 +225,17 @@ pub fn start_recording(
                 }
                 Err(e) => {
                     if let Some(saved) = preserve_failed_capture(&wav_path, &config) {
+                        set_latest_output(
+                            &latest_output,
+                            Some(OutputNotice {
+                                kind: "preserved-capture".into(),
+                                title: "Raw capture preserved".into(),
+                                path: saved.display().to_string(),
+                                detail:
+                                    "Processing failed, but the raw audio capture was preserved."
+                                        .into(),
+                            }),
+                        );
                         eprintln!(
                             "Pipeline error: {}. Raw audio preserved at {}",
                             e,
@@ -214,6 +254,15 @@ pub fn start_recording(
         Err(e) => {
             recording.store(false, Ordering::Relaxed);
             if let Some(saved) = preserve_failed_capture(&wav_path, &config) {
+                set_latest_output(
+                    &latest_output,
+                    Some(OutputNotice {
+                        kind: "preserved-capture".into(),
+                        title: "Partial capture preserved".into(),
+                        path: saved.display().to_string(),
+                        detail: "Recording failed before processing, but the captured audio was preserved.".into(),
+                    }),
+                );
                 eprintln!(
                     "Capture error: {}. Partial audio preserved at {}",
                     e,
@@ -248,10 +297,11 @@ pub fn cmd_start_recording(
     let stop = state.stop_flag.clone();
     let processing = state.processing.clone();
     let processing_stage = state.processing_stage.clone();
+    let latest_output = state.latest_output.clone();
     crate::update_tray_state(&app, true);
     let app_done = app.clone();
     std::thread::spawn(move || {
-        start_recording(app, rec, stop, processing, processing_stage);
+        start_recording(app, rec, stop, processing, processing_stage, latest_output);
         crate::update_tray_state(&app_done, false);
     });
     Ok(())
@@ -277,6 +327,11 @@ pub fn cmd_status(state: tauri::State<AppState>) -> serde_json::Value {
         .lock()
         .ok()
         .and_then(|stage| stage.clone());
+    let latest_output = state
+        .latest_output
+        .lock()
+        .ok()
+        .and_then(|notice| notice.clone());
 
     // Get elapsed time if recording
     let elapsed = if recording || (status.recording && !processing) {
@@ -313,6 +368,7 @@ pub fn cmd_status(state: tauri::State<AppState>) -> serde_json::Value {
         "recording": recording || (status.recording && !processing),
         "processing": processing,
         "processingStage": processing_stage,
+        "latestOutput": latest_output,
         "pid": status.pid,
         "elapsed": elapsed,
         "audioLevel": audio_level,
@@ -357,6 +413,11 @@ pub fn cmd_open_file(path: String) -> Result<(), String> {
         .spawn()
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn cmd_clear_latest_output(state: tauri::State<AppState>) {
+    set_latest_output(&state.latest_output, None);
 }
 
 #[tauri::command]
@@ -528,6 +589,24 @@ mod tests {
             stage_label(minutes_core::pipeline::PipelineStage::Saving),
             "Saving meeting"
         );
+    }
+
+    #[test]
+    fn set_latest_output_replaces_previous_notice() {
+        let latest_output = Arc::new(Mutex::new(None));
+        set_latest_output(
+            &latest_output,
+            Some(OutputNotice {
+                kind: "saved".into(),
+                title: "Demo".into(),
+                path: "/tmp/demo.md".into(),
+                detail: "Saved".into(),
+            }),
+        );
+
+        let current = latest_output.lock().unwrap().clone().unwrap();
+        assert_eq!(current.title, "Demo");
+        assert_eq!(current.path, "/tmp/demo.md");
     }
 
     #[test]

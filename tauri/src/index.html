@@ -260,6 +260,78 @@
       margin-top: 2px;
     }
 
+    /* ── Output notice ── */
+    .output-notice {
+      display: none;
+      padding: 12px 20px;
+      background: rgba(48, 209, 88, 0.08);
+      border-bottom: 1px solid rgba(48, 209, 88, 0.16);
+    }
+
+    .output-notice.active { display: block; }
+
+    .output-notice.capture {
+      background: rgba(255, 159, 10, 0.08);
+      border-bottom-color: rgba(255, 159, 10, 0.16);
+    }
+
+    .output-notice-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .output-notice-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+      background: rgba(48, 209, 88, 0.16);
+      color: var(--green);
+    }
+
+    .output-notice.capture .output-notice-icon {
+      background: rgba(255, 159, 10, 0.16);
+      color: #ff9f0a;
+    }
+
+    .output-notice-copy {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .output-notice-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .output-notice-detail {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 3px;
+      line-height: 1.45;
+    }
+
+    .output-notice-path {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      margin-top: 6px;
+      font-family: var(--font-mono);
+      word-break: break-all;
+    }
+
+    .output-notice-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
     /* ── Quick note inline ── */
     .quick-note {
       display: none;
@@ -786,6 +858,23 @@
     </div>
   </div>
 
+  <!-- Output notice -->
+  <div class="output-notice" id="output-notice">
+    <div class="output-notice-row">
+      <div class="output-notice-icon" id="output-notice-icon">✓</div>
+      <div class="output-notice-copy">
+        <div class="output-notice-title" id="output-notice-title">Saved meeting</div>
+        <div class="output-notice-detail" id="output-notice-detail"></div>
+        <div class="output-notice-path" id="output-notice-path"></div>
+        <div class="output-notice-actions">
+          <button class="btn btn-secondary btn-sm" id="btn-open-output">Open</button>
+          <button class="btn btn-secondary btn-sm" id="btn-open-output-folder">Show in Finder</button>
+          <button class="btn btn-secondary btn-sm" id="btn-dismiss-output">Dismiss</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Quick note (shown when "Add Note" clicked during recording) -->
   <div class="quick-note" id="quick-note">
     <div class="quick-note-row">
@@ -981,6 +1070,11 @@
     const processingBar = document.getElementById('processing-bar');
     const recordingTime = document.getElementById('recording-time');
     const processingStage = document.getElementById('processing-stage');
+    const outputNotice = document.getElementById('output-notice');
+    const outputNoticeIcon = document.getElementById('output-notice-icon');
+    const outputNoticeTitle = document.getElementById('output-notice-title');
+    const outputNoticeDetail = document.getElementById('output-notice-detail');
+    const outputNoticePath = document.getElementById('output-notice-path');
     const quickNote = document.getElementById('quick-note');
     const noteInput = document.getElementById('note-inline-input');
     const footer = document.getElementById('footer');
@@ -999,6 +1093,7 @@
     let currentMeetingDetail = null;
     let activeSearchQuery = '';
     let currentSetup = null;
+    let latestOutput = null;
     let pollInterval = null;
     const NUM_BARS = 32;
     const audioViz = document.getElementById('audio-viz');
@@ -1038,6 +1133,7 @@
         const wasProcessing = isProcessing;
         isRecording = status.recording;
         isProcessing = !!status.processing;
+        updateOutputNotice(status.latestOutput);
 
         if (isRecording) {
           statusPill.className = 'status-pill recording';
@@ -1087,6 +1183,23 @@
       if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
     }
 
+    function updateOutputNotice(notice) {
+      latestOutput = notice || null;
+      if (!notice) {
+        outputNotice.classList.remove('active', 'capture');
+        return;
+      }
+
+      const isCapture = notice.kind === 'preserved-capture';
+      outputNotice.classList.toggle('capture', isCapture);
+      outputNotice.classList.add('active');
+      outputNoticeIcon.textContent = isCapture ? '!' : '✓';
+      outputNoticeTitle.textContent = notice.title || (isCapture ? 'Capture preserved' : 'Saved meeting');
+      outputNoticeDetail.textContent = notice.detail || '';
+      outputNoticePath.textContent = notice.path || '';
+      document.getElementById('btn-open-output').textContent = isCapture ? 'Open Capture' : 'Open Meeting';
+    }
+
     // ── Recording controls ──
     document.getElementById('btn-record').addEventListener('click', async () => {
       try {
@@ -1101,6 +1214,34 @@
         await invoke('cmd_stop_recording');
       } catch (e) {
         console.error('Stop:', e);
+      }
+    });
+
+    document.getElementById('btn-open-output').addEventListener('click', async () => {
+      if (!latestOutput?.path) return;
+      try {
+        await invoke('cmd_open_file', { path: latestOutput.path });
+      } catch (e) {
+        console.error('Open output:', e);
+      }
+    });
+
+    document.getElementById('btn-open-output-folder').addEventListener('click', async () => {
+      if (!latestOutput?.path) return;
+      try {
+        const folder = latestOutput.path.slice(0, latestOutput.path.lastIndexOf('/'));
+        await invoke('cmd_open_file', { path: folder });
+      } catch (e) {
+        console.error('Open folder:', e);
+      }
+    });
+
+    document.getElementById('btn-dismiss-output').addEventListener('click', async () => {
+      try {
+        await invoke('cmd_clear_latest_output');
+        updateOutputNotice(null);
+      } catch (e) {
+        console.error('Dismiss output:', e);
       }
     });
 
