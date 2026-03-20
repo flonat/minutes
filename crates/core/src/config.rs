@@ -304,6 +304,15 @@ impl Config {
         std::fs::create_dir_all(minutes_dir().join("inbox").join("processed"))?;
         std::fs::create_dir_all(minutes_dir().join("inbox").join("failed"))?;
         std::fs::create_dir_all(minutes_dir().join("logs"))?;
+
+        // Block macOS Spotlight from indexing sensitive transcript data
+        for dir in [&self.output_dir, &minutes_dir()] {
+            let marker = dir.join(".metadata_never_index");
+            if !marker.exists() {
+                std::fs::write(&marker, "").ok();
+            }
+        }
+
         Ok(())
     }
 

@@ -4,10 +4,11 @@ use crate::config::Config;
 // LLM summarization module (pluggable).
 //
 // Supported engines:
-//   "claude"  → Anthropic Claude API (ANTHROPIC_API_KEY env var)
-//   "openai"  → OpenAI API (OPENAI_API_KEY env var)
+//   "none"    → Skip summarization — Claude summarizes via MCP when asked (default)
+//   "agent"   → Agent CLI (claude -p, codex exec) — uses existing subscription, no API key
 //   "ollama"  → Local Ollama server (no API key needed)
-//   "none"    → Skip summarization (default)
+//   "claude"  → Anthropic Claude API (ANTHROPIC_API_KEY env var, legacy)
+//   "openai"  → OpenAI API (OPENAI_API_KEY env var, legacy)
 //
 // For long transcripts: map-reduce chunking.
 //   Chunk by time segments → summarize each chunk → synthesize final.
@@ -243,74 +244,116 @@ fn summarize_with_agent(
     transcript: &str,
     config: &Config,
 ) -> Result<Summary, Box<dyn std::error::Error>> {
+    use std::io::Write;
+
     let agent_cmd = if config.summarization.agent_command.is_empty() {
         "claude".to_string()
     } else {
         config.summarization.agent_command.clone()
     };
 
-    let prompt = format!(
-        "{}\n\nSummarize this transcript:\n\n{}",
-        SYSTEM_PROMPT,
-        // Truncate very long transcripts to avoid CLI arg limits
-        if transcript.len() > 100_000 {
-            &transcript[..100_000]
-        } else {
-            transcript
+    // Truncate at a safe UTF-8 char boundary to avoid panics
+    let max_transcript = 100_000;
+    let truncated = if transcript.len() > max_transcript {
+        let mut end = max_transcript;
+        while end > 0 && !transcript.is_char_boundary(end) {
+            end -= 1;
         }
-    );
-
-    tracing::info!(agent = %agent_cmd, "summarizing via agent CLI");
-
-    let output = if agent_cmd == "claude" || agent_cmd.ends_with("/claude") {
-        // Claude Code: `claude -p "prompt" --no-input`
-        std::process::Command::new(&agent_cmd)
-            .args(["-p", &prompt, "--no-input"])
-            .output()
-    } else if agent_cmd == "codex" || agent_cmd.ends_with("/codex") {
-        // Codex CLI: `codex exec "prompt" -s read-only`
-        std::process::Command::new(&agent_cmd)
-            .args(["exec", &prompt, "-s", "read-only"])
-            .output()
+        &transcript[..end]
     } else {
-        // Generic: pipe prompt via stdin
-        use std::io::Write;
-        let mut child = std::process::Command::new(&agent_cmd)
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()?;
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(prompt.as_bytes())?;
-        }
-        Ok(child.wait_with_output()?)
+        transcript
     };
 
-    let output = output.map_err(|e| {
-        format!(
-            "Agent '{}' not found or failed to start: {}. \
-             Install it or change [summarization] agent_command in config.toml",
-            agent_cmd, e
-        )
-    })?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Agent '{}' exited with error: {}", agent_cmd, stderr).into());
-    }
-
-    let response = String::from_utf8_lossy(&output.stdout).to_string();
-    if response.trim().is_empty() {
-        return Err(format!("Agent '{}' returned empty output", agent_cmd).into());
-    }
-
-    tracing::info!(
-        agent = %agent_cmd,
-        response_len = response.len(),
-        "agent summarization complete"
+    let prompt = format!(
+        "{}\n\nSummarize this transcript:\n\n{}",
+        SYSTEM_PROMPT, truncated
     );
 
-    Ok(parse_summary_response(&response))
+    tracing::info!(agent = %agent_cmd, prompt_len = prompt.len(), "summarizing via agent CLI");
+
+    // All agents use stdin/pipe to avoid OS ARG_MAX limits.
+    // A 100K transcript as a CLI argument works on most systems but is fragile.
+    // Piping is universally safe and works with all agents.
+    let (cmd, args): (&str, Vec<&str>) =
+        if agent_cmd == "claude" || agent_cmd.ends_with("/claude") {
+            (&agent_cmd, vec!["-p", "-", "--no-input"])
+        } else if agent_cmd == "codex" || agent_cmd.ends_with("/codex") {
+            (&agent_cmd, vec!["exec", "-", "-s", "read-only"])
+        } else {
+            (&agent_cmd, vec![])
+        };
+
+    let mut child = std::process::Command::new(cmd)
+        .args(&args)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| {
+            format!(
+                "Agent '{}' not found or failed to start: {}. \
+                 Install it or change [summarization] agent_command in config.toml",
+                agent_cmd, e
+            )
+        })?;
+
+    // Write prompt to stdin
+    if let Some(mut stdin) = child.stdin.take() {
+        // Write in a thread to avoid deadlock if the process buffer fills
+        let prompt_bytes = prompt.into_bytes();
+        std::thread::spawn(move || {
+            stdin.write_all(&prompt_bytes).ok();
+            // stdin drops here, closing the pipe
+        });
+    }
+
+    // Wait with a 5-minute timeout (long meetings = long summaries)
+    let timeout = std::time::Duration::from_secs(300);
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let output = child.wait_with_output().map_err(|e| {
+                    format!("Failed to read agent output: {}", e)
+                })?;
+
+                if !status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    return Err(format!(
+                        "Agent '{}' exited with error: {}",
+                        agent_cmd, stderr
+                    ).into());
+                }
+
+                let response = String::from_utf8_lossy(&output.stdout).to_string();
+                if response.trim().is_empty() {
+                    return Err(format!("Agent '{}' returned empty output", agent_cmd).into());
+                }
+
+                tracing::info!(
+                    agent = %agent_cmd,
+                    response_len = response.len(),
+                    "agent summarization complete"
+                );
+
+                return Ok(parse_summary_response(&response));
+            }
+            Ok(None) => {
+                // Still running
+                if start.elapsed() > timeout {
+                    child.kill().ok();
+                    return Err(format!(
+                        "Agent '{}' timed out after {}s",
+                        agent_cmd, timeout.as_secs()
+                    ).into());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+            Err(e) => {
+                return Err(format!("Failed to check agent status: {}", e).into());
+            }
+        }
+    }
 }
 
 // ── Claude API ───────────────────────────────────────────────

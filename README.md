@@ -267,15 +267,21 @@ MCP tools are automatically available in Cowork. From your phone via Dispatch: *
 
 ### Optional: automated summarization
 
-If you want summaries generated automatically in the pipeline (without asking Claude each time), you can configure a local LLM:
+If you want summaries generated automatically in the pipeline (without asking Claude each time):
 
 ```toml
+# Use your existing Claude Code or Codex subscription (recommended)
 [summarization]
-engine = "ollama"         # Free, local, no API key
+engine = "agent"
+agent_command = "claude"  # or "codex" for OpenAI Codex users
+
+# Or use a free local LLM
+[summarization]
+engine = "ollama"
 ollama_model = "llama3.2"
 ```
 
-Or use API keys for cloud LLMs — but most users won't need this since Claude handles it conversationally.
+The `agent` engine shells out to your installed AI CLI — no API keys to manage, uses the same subscription you already have. Most users won't need this since Claude handles summarization conversationally via MCP.
 
 ## Voice memos (iPhone → Mac)
 
