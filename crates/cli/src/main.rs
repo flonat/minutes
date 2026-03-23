@@ -79,6 +79,10 @@ enum Commands {
         /// Filter structured intents by owner / person
         #[arg(long)]
         owner: Option<String>,
+
+        /// Output format: text (human-readable) or json (one JSON object per line)
+        #[arg(long, default_value = "text", value_parser = ["text", "json"])]
+        format: String,
     },
 
     /// Show open action items across all meetings
@@ -132,6 +136,17 @@ enum Commands {
         /// Filter by type: meeting or memo
         #[arg(short = 't', long)]
         content_type: Option<String>,
+    },
+
+    /// Export meetings as CSV (to stdout or file)
+    Export {
+        /// Filter by type: meeting or memo
+        #[arg(short = 't', long)]
+        content_type: Option<String>,
+
+        /// Write CSV to a file instead of stdout
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
 
     /// Process an audio file through the pipeline
@@ -305,6 +320,7 @@ fn main() -> Result<()> {
             intents_only,
             intent_kind,
             owner,
+            format,
         } => cmd_search(
             &query,
             content_type,
@@ -313,6 +329,7 @@ fn main() -> Result<()> {
             intents_only,
             intent_kind,
             owner,
+            &format,
             &config,
         ),
         Commands::Actions { assignee } => cmd_actions(assignee.as_deref(), &config),
@@ -331,6 +348,10 @@ fn main() -> Result<()> {
             limit,
             content_type,
         } => cmd_list(limit, content_type, &config),
+        Commands::Export {
+            content_type,
+            output,
+        } => cmd_export(content_type, output, &config),
         Commands::Process {
             path,
             content_type,
@@ -615,8 +636,10 @@ fn cmd_search(
     intents_only: bool,
     intent_kind: Option<String>,
     owner: Option<String>,
+    format: &str,
     config: &Config,
 ) -> Result<()> {
+    let json_mode = format == "json";
     let filters = minutes_core::search::SearchFilters {
         content_type,
         since,
@@ -632,27 +655,38 @@ fn cmd_search(
         let limited: Vec<_> = results.into_iter().take(limit).collect();
 
         if limited.is_empty() {
-            eprintln!("No intent records found for \"{}\"", query);
-            println!("[]");
+            if json_mode {
+                // In JSON mode, output nothing (empty JSONL)
+            } else {
+                eprintln!("No intent records found for \"{}\"", query);
+                println!("[]");
+            }
             return Ok(());
         }
 
-        for result in &limited {
-            let who = result.who.as_deref().unwrap_or("unassigned");
-            let due = result.by_date.as_deref().unwrap_or("no due date");
-            eprintln!(
-                "\n{} — {} [{}]",
-                result.date, result.title, result.content_type
-            );
-            eprintln!(
-                "  {:?}: {} (@{}, {}, {})",
-                result.kind, result.what, who, result.status, due
-            );
-            eprintln!("  {}", result.path.display());
-        }
+        if json_mode {
+            // JSONL: one JSON object per line
+            for result in &limited {
+                println!("{}", serde_json::to_string(result)?);
+            }
+        } else {
+            for result in &limited {
+                let who = result.who.as_deref().unwrap_or("unassigned");
+                let due = result.by_date.as_deref().unwrap_or("no due date");
+                eprintln!(
+                    "\n{} — {} [{}]",
+                    result.date, result.title, result.content_type
+                );
+                eprintln!(
+                    "  {:?}: {} (@{}, {}, {})",
+                    result.kind, result.what, who, result.status, due
+                );
+                eprintln!("  {}", result.path.display());
+            }
 
-        let json = serde_json::to_string_pretty(&limited)?;
-        println!("{}", json);
+            let json = serde_json::to_string_pretty(&limited)?;
+            println!("{}", json);
+        }
         return Ok(());
     }
 
@@ -660,25 +694,36 @@ fn cmd_search(
     let limited: Vec<_> = results.into_iter().take(limit).collect();
 
     if limited.is_empty() {
-        eprintln!("No results found for \"{}\"", query);
-        println!("[]");
+        if json_mode {
+            // In JSON mode, output nothing (empty JSONL)
+        } else {
+            eprintln!("No results found for \"{}\"", query);
+            println!("[]");
+        }
         return Ok(());
     }
 
-    for result in &limited {
-        eprintln!(
-            "\n{} — {} [{}]",
-            result.date, result.title, result.content_type
-        );
-        if !result.snippet.is_empty() {
-            eprintln!("  {}", result.snippet);
+    if json_mode {
+        // JSONL: one JSON object per line
+        for result in &limited {
+            println!("{}", serde_json::to_string(result)?);
         }
-        eprintln!("  {}", result.path.display());
-    }
+    } else {
+        for result in &limited {
+            eprintln!(
+                "\n{} — {} [{}]",
+                result.date, result.title, result.content_type
+            );
+            if !result.snippet.is_empty() {
+                eprintln!("  {}", result.snippet);
+            }
+            eprintln!("  {}", result.path.display());
+        }
 
-    // Also output JSON for programmatic use
-    let json = serde_json::to_string_pretty(&limited)?;
-    println!("{}", json);
+        // Also output JSON for programmatic use
+        let json = serde_json::to_string_pretty(&limited)?;
+        println!("{}", json);
+    }
     Ok(())
 }
 
@@ -706,7 +751,62 @@ fn cmd_actions(assignee: Option<&str>, config: &Config) -> Result<()> {
 
 fn cmd_list(limit: usize, content_type: Option<String>, config: &Config) -> Result<()> {
     // List delegates to search with an empty query — DRY, no duplicated file walking
-    cmd_search("", content_type, None, limit, false, None, None, config)
+    cmd_search("", content_type, None, limit, false, None, None, "text", config)
+}
+
+fn cmd_export(
+    content_type: Option<String>,
+    output: Option<PathBuf>,
+    config: &Config,
+) -> Result<()> {
+    let filters = minutes_core::search::SearchFilters {
+        content_type,
+        since: None,
+        attendee: None,
+        intent_kind: None,
+        owner: None,
+        recorded_by: None,
+    };
+
+    // Reuse search with empty query to get all meetings
+    let results = minutes_core::search::search("", config, &filters)?;
+
+    // Build CSV writer (to file or stdout)
+    let mut wtr: Box<dyn std::io::Write> = if let Some(ref path) = output {
+        Box::new(std::fs::File::create(path)?)
+    } else {
+        Box::new(std::io::stdout())
+    };
+
+    let mut csv_wtr = csv::Writer::from_writer(&mut wtr);
+    csv_wtr.write_record(["date", "title", "type", "duration", "path"])?;
+
+    for result in &results {
+        // Parse frontmatter to get duration
+        let content = std::fs::read_to_string(&result.path).unwrap_or_default();
+        let (fm_str, _) = minutes_core::markdown::split_frontmatter(&content);
+        let duration =
+            minutes_core::markdown::extract_field(fm_str, "duration").unwrap_or_default();
+
+        csv_wtr.write_record([
+            &result.date,
+            &result.title,
+            &result.content_type,
+            &duration,
+            &result.path.display().to_string(),
+        ])?;
+    }
+
+    csv_wtr.flush()?;
+
+    let count = results.len();
+    if let Some(ref path) = output {
+        eprintln!("Exported {} meetings to {}", count, path.display());
+    } else {
+        eprintln!("Exported {} meetings", count);
+    }
+
+    Ok(())
 }
 
 fn cmd_consistency(owner: Option<&str>, stale_after_days: i64, config: &Config) -> Result<()> {

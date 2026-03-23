@@ -27,6 +27,7 @@ hound = { workspace = true }
 dirs = { workspace = true }
 schemars = { workspace = true, features = ["derive"] }
 ureq = { workspace = true }
+csv = "1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

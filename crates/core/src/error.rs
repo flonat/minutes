@@ -40,7 +40,7 @@ pub enum CaptureError {
 
 #[derive(Debug, Error)]
 pub enum TranscribeError {
-    #[error("whisper model not found at {0} — run: minutes setup")]
+    #[error("Whisper model not found. {0}\n\nTo fix this, run:\n\n    minutes setup --model tiny\n")]
     ModelNotFound(String),
 
     #[error("failed to load whisper model: {0}")]

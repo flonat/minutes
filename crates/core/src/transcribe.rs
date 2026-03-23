@@ -392,10 +392,9 @@ fn resolve_model_path(config: &Config) -> Result<PathBuf, TranscribeError> {
     }
 
     Err(TranscribeError::ModelNotFound(format!(
-        "looked in {} for ggml-{}.bin — run: minutes setup --model {}",
+        "Expected model file \"ggml-{}.bin\" in {}",
+        model_name,
         model_dir.display(),
-        model_name,
-        model_name,
     )))
 }
 
@@ -473,7 +472,21 @@ mod tests {
         let result = resolve_model_path(&config);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("minutes setup"));
+        assert!(
+            err.contains("minutes setup --model tiny"),
+            "error should tell user how to fix it: {}",
+            err
+        );
+        assert!(
+            err.contains("ggml-nonexistent.bin"),
+            "error should include expected model filename: {}",
+            err
+        );
+        assert!(
+            err.contains("/tmp/no-such-dir"),
+            "error should include the model directory: {}",
+            err
+        );
     }
 
     #[test]
