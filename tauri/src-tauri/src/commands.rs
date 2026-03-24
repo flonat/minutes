@@ -2823,12 +2823,34 @@ fn show_dictation_overlay(app: &tauri::AppHandle) {
         win.close().ok();
     }
 
-    // Position: top-center, 60px below screen top
-    // Calculate center x for a 240px-wide window on a typical display
-    let width = 240.0;
-    let screen_width = 1440.0; // reasonable default
-    let x = (screen_width - width) / 2.0;
-    let y = 60.0;
+    // Position: bottom-right HUD, anchored to the current monitor work area.
+    let width = 320.0;
+    let height = 60.0;
+    let inset_x = 16.0;
+    let inset_y = 16.0;
+
+    let monitor = app
+        .get_webview_window("main")
+        .and_then(|window| window.current_monitor().ok().flatten())
+        .or_else(|| {
+            app.get_webview_window("main")
+                .and_then(|window| window.primary_monitor().ok().flatten())
+        });
+
+    let (x, y) = if let Some(monitor) = monitor {
+        let scale = monitor.scale_factor();
+        let work_area = monitor.work_area();
+        let work_x = work_area.position.x as f64 / scale;
+        let work_y = work_area.position.y as f64 / scale;
+        let work_width = work_area.size.width as f64 / scale;
+        let work_height = work_area.size.height as f64 / scale;
+        (
+            work_x + work_width - width - inset_x,
+            work_y + work_height - height - inset_y,
+        )
+    } else {
+        (1440.0 - width - inset_x, 900.0 - height - inset_y)
+    };
 
     match tauri::WebviewWindowBuilder::new(
         app,
@@ -2836,10 +2858,12 @@ fn show_dictation_overlay(app: &tauri::AppHandle) {
         WebviewUrl::App("dictation-overlay.html".into()),
     )
     .title("Dictation")
-    .inner_size(width, 48.0)
+    .inner_size(width, height)
     .position(x, y)
     .resizable(false)
     .decorations(false)
+    .transparent(true)
+    .shadow(false)
     .always_on_top(true)
     .focused(false)
     .skip_taskbar(true)
