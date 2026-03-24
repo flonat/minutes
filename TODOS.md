@@ -41,14 +41,8 @@
 **Effort:** L (human: ~2 weeks / CC: ~2 hours)
 **Depends on:** Recall panel + usage data on whether users need per-meeting threads.
 
-## P3: Publish to crates.io
-**What:** Publish `minutes` to crates.io so users can install via `cargo install minutes`.
-**Why:** The MCPB extension bundles only the Node.js MCP server, not the Rust binary. Users on any platform need to install the binary separately. `cargo install minutes` is the simplest universal method.
-**Pros:** Standard Rust distribution. Shows up in crates.io search. Enables version pinning.
-**Cons:** Need to resolve crate name availability. Requires maintaining a publish workflow.
-**Context:** Deferred from windows-support eng review (2026-03-21). Currently users must use `cargo install --git` or download release binaries.
-**Effort:** S (human: ~2 hours / CC: ~15 min)
-**Depends on:** Windows support landing (cross-platform CI must pass first).
+## ~~P3: Publish to crates.io~~ DONE
+**Shipped:** 2026-03-24. `minutes-core@0.7.0` + `minutes-cli@0.7.0` published. `cargo install minutes-cli` works on all platforms.
 
 ## P3: WASM compilation of minutes-reader for SDK
 **What:** Compile `minutes-reader` (Rust crate, no audio deps) to WASM and use it as the npm SDK's parsing core instead of the TypeScript reimplementation.
