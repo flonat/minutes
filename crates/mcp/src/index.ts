@@ -184,21 +184,68 @@ const EXPECTED_CLI_VERSION = "0.8.0";
 
 let installAttempted = false;
 
+function getReleaseBinaryName(): string | null {
+  const platform = process.platform;
+  const arch = process.arch;
+  if (platform === "darwin" && arch === "arm64") return "minutes-macos-arm64";
+  if (platform === "darwin" && arch === "x64") return "minutes-macos-arm64"; // Rosetta handles it
+  if (platform === "linux" && arch === "x64") return "minutes-linux-x64";
+  if (platform === "win32" && arch === "x64") return "minutes-windows-x64.exe";
+  return null;
+}
+
+function getInstallDir(): string {
+  const localBin = join(homedir(), ".local", "bin");
+  if (process.platform === "win32") {
+    return join(homedir(), ".cargo", "bin"); // common writable dir on Windows
+  }
+  return localBin;
+}
+
 async function tryAutoInstall(): Promise<boolean> {
   if (installAttempted) return false;
   installAttempted = true;
 
-  const platform = process.platform;
   console.error("[Minutes] CLI not found — attempting automatic install...");
 
-  if (platform === "darwin") {
-    // macOS: try Homebrew first (most common)
+  // Strategy 1: Download pre-built binary from GitHub release (fastest, no deps)
+  const binaryName = getReleaseBinaryName();
+  if (binaryName) {
+    try {
+      const url = `https://github.com/silverstein/minutes/releases/download/v${EXPECTED_CLI_VERSION}/${binaryName}`;
+      const installDir = getInstallDir();
+      const isWindows = process.platform === "win32";
+      const targetName = isWindows ? "minutes.exe" : "minutes";
+      const targetPath = join(installDir, targetName);
+
+      console.error(`[Minutes] Downloading ${binaryName} from v${EXPECTED_CLI_VERSION} release...`);
+
+      // Ensure install directory exists
+      await execFileAsync("mkdir", ["-p", installDir], { timeout: 5000 }).catch(() => {});
+
+      // Download with curl (available on macOS, Linux, and modern Windows)
+      await execFileAsync("curl", ["-fSL", "-o", targetPath, url], { timeout: 120000 });
+
+      // Make executable (not needed on Windows)
+      if (!isWindows) {
+        await execFileAsync("chmod", ["+x", targetPath], { timeout: 5000 });
+      }
+
+      console.error(`[Minutes] ✓ Installed to ${targetPath}`);
+      MINUTES_BIN = targetPath;
+      return true;
+    } catch (e: any) {
+      console.error(`[Minutes] Binary download failed: ${e.message || e}`);
+    }
+  }
+
+  // Strategy 2: Homebrew (macOS only)
+  if (process.platform === "darwin") {
     try {
       console.error("[Minutes] Trying: brew tap silverstein/tap && brew install minutes");
       await execFileAsync("brew", ["tap", "silverstein/tap"], { timeout: 120000 });
       await execFileAsync("brew", ["install", "minutes"], { timeout: 300000 });
       console.error("[Minutes] ✓ Installed via Homebrew");
-      // Re-resolve the binary path after install
       MINUTES_BIN = findMinutesBinary();
       return true;
     } catch (e: any) {
@@ -206,7 +253,7 @@ async function tryAutoInstall(): Promise<boolean> {
     }
   }
 
-  // All platforms: try cargo install as fallback
+  // Strategy 3: Cargo (if Rust is installed)
   try {
     console.error("[Minutes] Trying: cargo install minutes-cli");
     await execFileAsync("cargo", ["install", "minutes-cli"], { timeout: 600000 });
@@ -220,7 +267,8 @@ async function tryAutoInstall(): Promise<boolean> {
   console.error(
     "[Minutes] Auto-install failed. Install manually:\n" +
     "  macOS:   brew tap silverstein/tap && brew install minutes\n" +
-    "  Any:     cargo install minutes-cli"
+    "  Any:     cargo install minutes-cli\n" +
+    "  Source:  https://github.com/silverstein/minutes"
   );
   return false;
 }
