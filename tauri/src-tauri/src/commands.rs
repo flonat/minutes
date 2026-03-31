@@ -47,6 +47,20 @@ pub struct SpeakerAttributionView {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
+pub struct ActionItemView {
+    pub assignee: String,
+    pub task: String,
+    pub due: Option<String>,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DecisionView {
+    pub text: String,
+    pub topic: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct MeetingDetail {
     pub path: String,
     pub title: String,
@@ -57,6 +71,8 @@ pub struct MeetingDetail {
     pub context: Option<String>,
     pub attendees: Vec<String>,
     pub calendar_event: Option<String>,
+    pub action_items: Vec<ActionItemView>,
+    pub decisions: Vec<DecisionView>,
     pub sections: Vec<MeetingSection>,
     pub speaker_map: Vec<SpeakerAttributionView>,
 }
@@ -490,23 +506,23 @@ fn sync_processing_indicator(
     processing.store(summary.is_some(), Ordering::Relaxed);
     set_processing_stage(
         processing_stage,
-        summary
-            .as_ref()
-            .and_then(|job| job.stage.as_deref()),
+        summary.as_ref().and_then(|job| job.stage.as_deref()),
     );
 }
 
 fn output_notice_from_job(job: &minutes_core::jobs::ProcessingJob) -> Option<OutputNotice> {
     match job.state {
-        minutes_core::jobs::JobState::Complete => job.output_path.as_ref().map(|path| OutputNotice {
-            kind: "saved".into(),
-            title: job
-                .title
-                .clone()
-                .unwrap_or_else(|| "Processed recording".into()),
-            path: path.clone(),
-            detail: "Saved meeting markdown".into(),
-        }),
+        minutes_core::jobs::JobState::Complete => {
+            job.output_path.as_ref().map(|path| OutputNotice {
+                kind: "saved".into(),
+                title: job
+                    .title
+                    .clone()
+                    .unwrap_or_else(|| "Processed recording".into()),
+                path: path.clone(),
+                detail: "Saved meeting markdown".into(),
+            })
+        }
         minutes_core::jobs::JobState::Failed => {
             let path = job
                 .output_path
@@ -552,7 +568,10 @@ pub fn spawn_processing_worker(
         });
 
         if let Err(error) = result {
-            if !matches!(error, minutes_core::MinutesError::Pid(minutes_core::error::PidError::AlreadyRecording(_))) {
+            if !matches!(
+                error,
+                minutes_core::MinutesError::Pid(minutes_core::error::PidError::AlreadyRecording(_))
+            ) {
                 eprintln!("[minutes] processing worker failed: {}", error);
             }
         }
@@ -2207,6 +2226,26 @@ pub fn cmd_get_meeting_detail(path: String) -> Result<MeetingDetail, String> {
         })
         .collect();
 
+    let action_items: Vec<ActionItemView> = frontmatter
+        .action_items
+        .iter()
+        .map(|a| ActionItemView {
+            assignee: a.assignee.clone(),
+            task: a.task.clone(),
+            due: a.due.clone(),
+            status: a.status.clone(),
+        })
+        .collect();
+
+    let decisions: Vec<DecisionView> = frontmatter
+        .decisions
+        .iter()
+        .map(|d| DecisionView {
+            text: d.text.clone(),
+            topic: d.topic.clone(),
+        })
+        .collect();
+
     Ok(MeetingDetail {
         path,
         title: frontmatter.title,
@@ -2217,6 +2256,8 @@ pub fn cmd_get_meeting_detail(path: String) -> Result<MeetingDetail, String> {
         context: frontmatter.context,
         attendees: frontmatter.attendees,
         calendar_event: frontmatter.calendar_event,
+        action_items,
+        decisions,
         sections: parse_sections(body),
         speaker_map,
     })

@@ -176,9 +176,7 @@ pub fn transcribe_to_artifact(
                 .as_deref()
                 .and_then(title_from_context)
                 .map(finalize_title)
-                .unwrap_or_else(|| {
-                    generate_title(&transcript, context.pre_context.as_deref())
-                })
+                .unwrap_or_else(|| generate_title(&transcript, context.pre_context.as_deref()))
         }
     });
 
@@ -197,7 +195,11 @@ pub fn transcribe_to_artifact(
         .map(|entity| entity.label.clone())
         .collect();
 
-    let source = if let Some(source) = context.sidecar.as_ref().and_then(|sidecar| sidecar.source.clone()) {
+    let source = if let Some(source) = context
+        .sidecar
+        .as_ref()
+        .and_then(|sidecar| sidecar.source.clone())
+    {
         Some(source)
     } else {
         match content_type {
@@ -219,8 +221,14 @@ pub fn transcribe_to_artifact(
         calendar_event: calendar_event_title,
         people,
         entities,
-        device: context.sidecar.as_ref().and_then(|sidecar| sidecar.device.clone()),
-        captured_at: context.sidecar.as_ref().and_then(|sidecar| sidecar.captured_at),
+        device: context
+            .sidecar
+            .as_ref()
+            .and_then(|sidecar| sidecar.device.clone()),
+        captured_at: context
+            .sidecar
+            .as_ref()
+            .and_then(|sidecar| sidecar.captured_at),
         context: context.pre_context.clone(),
         action_items: vec![],
         decisions: vec![],
@@ -275,10 +283,30 @@ where
         std::collections::HashMap::new();
     if config.diarization.engine != "none" && artifact.frontmatter.r#type == ContentType::Meeting {
         on_progress(PipelineStage::Diarizing);
+        let diarize_start = std::time::Instant::now();
         if let Some(result) = diarize::diarize(audio_path, config) {
+            let diarize_ms = diarize_start.elapsed().as_millis() as u64;
             diarization_num_speakers = result.num_speakers;
             diarization_embeddings = result.speaker_embeddings.clone();
+            logging::log_step(
+                "diarize",
+                &audio_path.display().to_string(),
+                diarize_ms,
+                serde_json::json!({
+                    "speakers": result.num_speakers,
+                    "segments": result.segments.len(),
+                    "first_segment_start": result.segments.first().map(|s| s.start),
+                    "last_segment_end": result.segments.last().map(|s| s.end),
+                }),
+            );
             transcript = diarize::apply_speakers(&transcript, &result);
+        } else {
+            logging::log_step(
+                "diarize",
+                &audio_path.display().to_string(),
+                diarize_start.elapsed().as_millis() as u64,
+                serde_json::json!({"skipped": true}),
+            );
         }
     }
 
@@ -294,6 +322,7 @@ where
     let mut structured_decisions: Vec<markdown::Decision> = Vec::new();
     let mut structured_intents: Vec<markdown::Intent> = Vec::new();
 
+    let mut raw_summary: Option<summarize::Summary> = None;
     let summary = if config.summarization.engine != "none" {
         on_progress(PipelineStage::Summarizing);
         let transcript_with_notes = if let Some(notes) = context.user_notes.as_ref() {
@@ -305,13 +334,17 @@ where
             transcript.clone()
         };
 
-        summarize::summarize_with_screens(&transcript_with_notes, &screen_files, config).map(|summary| {
-            structured_actions = extract_action_items(&summary);
-            structured_decisions = extract_decisions(&summary);
-            structured_intents = extract_intents(&summary);
-            summary_participants = summary.participants.clone();
-            summarize::format_summary(&summary)
-        })
+        summarize::summarize_with_screens(&transcript_with_notes, &screen_files, config).map(
+            |summary| {
+                structured_actions = extract_action_items(&summary);
+                structured_decisions = extract_decisions(&summary);
+                structured_intents = extract_intents(&summary);
+                summary_participants = summary.participants.clone();
+                let formatted = summarize::format_summary(&summary);
+                raw_summary = Some(summary);
+                formatted
+            },
+        )
     } else {
         None
     };
@@ -324,10 +357,8 @@ where
     }
 
     let mut attendees = artifact.frontmatter.attendees.clone();
-    let mut seen_lower: std::collections::HashSet<String> = attendees
-        .iter()
-        .map(|name| name.to_lowercase())
-        .collect();
+    let mut seen_lower: std::collections::HashSet<String> =
+        attendees.iter().map(|name| name.to_lowercase()).collect();
     for participant in &summary_participants {
         let lower = participant.to_lowercase();
         if !lower.is_empty() && seen_lower.insert(lower) {
@@ -350,7 +381,9 @@ where
         {
             if let Some(my_name) = config.identity.name.as_ref() {
                 let my_slug = slugify(my_name);
-                let other = attendees.iter().find(|attendee| slugify(attendee) != my_slug);
+                let other = attendees
+                    .iter()
+                    .find(|attendee| slugify(attendee) != my_slug);
                 if let Some(other_name) = other {
                     let my_confidence = if enrolled_profile_found.is_some() {
                         diarize::Confidence::High
@@ -450,6 +483,16 @@ where
 
     if !diarization_embeddings.is_empty() {
         crate::voice::save_meeting_embeddings(&result.path, &diarization_embeddings);
+    }
+
+    // Emit structured insight events for agent subscription
+    if let Some(ref summary_data) = raw_summary {
+        crate::events::emit_insights_from_summary(
+            summary_data,
+            &result.path.display().to_string(),
+            &frontmatter.title,
+            &frontmatter.attendees,
+        );
     }
 
     if let Err(error) =
@@ -600,6 +643,7 @@ where
 
     let mut summary_participants: Vec<String> = Vec::new();
 
+    let mut raw_summary: Option<summarize::Summary> = None;
     let summary: Option<String> = if config.summarization.engine != "none" {
         on_progress(PipelineStage::Summarizing);
         tracing::info!(step = "summarize", "generating summary");
@@ -626,7 +670,9 @@ where
                     "extracted participants from summary"
                 );
             }
-            summarize::format_summary(&s)
+            let formatted = summarize::format_summary(&s);
+            raw_summary = Some(s);
+            formatted
         })
     } else {
         None
@@ -879,6 +925,16 @@ where
         write_ms,
         serde_json::json!({"output": result.path.display().to_string(), "words": result.word_count}),
     );
+
+    // Emit structured insight events for agent subscription
+    if let Some(ref summary_data) = raw_summary {
+        crate::events::emit_insights_from_summary(
+            summary_data,
+            &result.path.display().to_string(),
+            &result.title,
+            &frontmatter.attendees,
+        );
+    }
 
     // Vault sync (non-fatal — pipeline succeeds regardless)
     match crate::vault::sync_file(&result.path, config) {

@@ -244,8 +244,20 @@ pub fn diarize(audio_path: &Path, config: &Config) -> Option<DiarizationResult> 
 
 /// Apply diarization results to a transcript.
 /// Replaces timestamp-only lines with speaker-labeled lines.
+/// Segments are sorted by start time before matching.
 pub fn apply_speakers(transcript: &str, result: &DiarizationResult) -> String {
     let mut output = String::new();
+
+    // Sort segments by start time for deterministic matching
+    let mut sorted_segments = result.segments.clone();
+    sorted_segments.sort_by(|a, b| {
+        a.start
+            .partial_cmp(&b.start)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut unknown_count = 0usize;
+    let mut matched_count = 0usize;
 
     for line in transcript.lines() {
         // Parse timestamp from lines like "[0:00] text"
@@ -255,7 +267,12 @@ pub fn apply_speakers(transcript: &str, result: &DiarizationResult) -> String {
                 let text = rest[bracket_end + 1..].trim();
 
                 if let Some(secs) = parse_timestamp(ts_str) {
-                    let speaker = find_speaker(secs, &result.segments);
+                    let speaker = find_speaker(secs, &sorted_segments);
+                    if speaker == "UNKNOWN" {
+                        unknown_count += 1;
+                    } else {
+                        matched_count += 1;
+                    }
                     output.push_str(&format!("[{} {}] {}\n", speaker, ts_str, text));
                     continue;
                 }
@@ -265,16 +282,55 @@ pub fn apply_speakers(transcript: &str, result: &DiarizationResult) -> String {
         output.push('\n');
     }
 
+    if unknown_count > 0 {
+        tracing::warn!(
+            unknown = unknown_count,
+            matched = matched_count,
+            "speaker attribution results — high unknown count may indicate timestamp/segment mismatch"
+        );
+    }
+
     output
 }
 
 /// Find which speaker is talking at a given timestamp.
+/// Segments MUST be sorted by start time.
+///
+/// 1. Exact containment: timestamp falls within [start, end)
+/// 2. Gap fallback (0.5s tolerance): if the timestamp falls in a small gap
+///    between segments, prefer the *next* speaker (who is about to talk)
+///    over the previous one (who just stopped). This matches how whisper
+///    floors timestamps to segment boundaries.
+/// 3. Beyond tolerance: return "UNKNOWN" — don't fabricate attribution
+///    for timestamps in silence.
 fn find_speaker(time_secs: f64, segments: &[SpeakerSegment]) -> &str {
-    for seg in segments {
-        if time_secs >= seg.start && time_secs < seg.end {
-            return &seg.speaker;
+    // Exact containment (binary search since segments are sorted)
+    let idx = segments.partition_point(|seg| seg.end <= time_secs);
+    if idx < segments.len() && time_secs >= segments[idx].start && time_secs < segments[idx].end {
+        return &segments[idx].speaker;
+    }
+
+    // Gap fallback: check the surrounding segments within 0.5s tolerance.
+    // Prefer the next segment (speaker about to talk) over the previous one.
+    let tolerance = 0.5;
+
+    // Next segment: idx (the one whose end is > time_secs)
+    if idx < segments.len() {
+        let gap = segments[idx].start - time_secs;
+        if gap >= 0.0 && gap <= tolerance {
+            return &segments[idx].speaker;
         }
     }
+
+    // Previous segment
+    if idx > 0 {
+        let prev = &segments[idx - 1];
+        let gap = time_secs - prev.end;
+        if gap >= 0.0 && gap <= tolerance {
+            return &prev.speaker;
+        }
+    }
+
     "UNKNOWN"
 }
 
@@ -589,6 +645,55 @@ mod tests {
         assert_eq!(find_speaker(2.5, &segments), "SPEAKER_0");
         assert_eq!(find_speaker(7.0, &segments), "SPEAKER_1");
         assert_eq!(find_speaker(15.0, &segments), "UNKNOWN");
+    }
+
+    #[test]
+    fn find_speaker_gap_fallback_prefers_next_speaker() {
+        // Segments with gaps — sorted by start time (as apply_speakers provides)
+        let segments = vec![
+            SpeakerSegment {
+                speaker: "SPEAKER_0".into(),
+                start: 0.045,
+                end: 3.98,
+            },
+            SpeakerSegment {
+                speaker: "SPEAKER_1".into(),
+                start: 4.12,
+                end: 8.5,
+            },
+        ];
+
+        // Timestamp 0.0 falls 0.045s before first segment — within 0.5s tolerance
+        assert_eq!(find_speaker(0.0, &segments), "SPEAKER_0");
+        // Timestamp 4.0 falls in gap: 0.02s from A end, 0.12s from B start
+        // Prefer next speaker (B) — they're about to talk
+        assert_eq!(find_speaker(4.0, &segments), "SPEAKER_1");
+        // Timestamp 8.6 is 0.1s past segment B — within 0.5s tolerance
+        assert_eq!(find_speaker(8.6, &segments), "SPEAKER_1");
+        // Timestamp 10.0 is 1.5s past segment B — beyond 0.5s tolerance
+        assert_eq!(find_speaker(10.0, &segments), "UNKNOWN");
+        // Timestamp 15.0 is far from any segment
+        assert_eq!(find_speaker(15.0, &segments), "UNKNOWN");
+    }
+
+    #[test]
+    fn find_speaker_silence_stays_unknown() {
+        // Long silence gap between speakers — should NOT fabricate attribution
+        let segments = vec![
+            SpeakerSegment {
+                speaker: "SPEAKER_0".into(),
+                start: 0.0,
+                end: 5.0,
+            },
+            SpeakerSegment {
+                speaker: "SPEAKER_1".into(),
+                start: 10.0,
+                end: 15.0,
+            },
+        ];
+
+        // Timestamp 7.0 is 2s from both segments — beyond tolerance
+        assert_eq!(find_speaker(7.0, &segments), "UNKNOWN");
     }
 
     #[test]

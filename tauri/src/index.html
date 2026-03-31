@@ -1103,6 +1103,29 @@
       white-space: pre-wrap;
     }
 
+    .detail-action-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .detail-action-item {
+      display: flex;
+      gap: 8px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--text-secondary);
+    }
+
+    .detail-action-check {
+      flex-shrink: 0;
+      font-size: 14px;
+    }
+
+    .detail-action-text {
+      min-width: 0;
+    }
+
     .detail-speakers {
       margin-top: 16px;
       padding: 12px 14px;
@@ -3597,6 +3620,65 @@
         }
 
         detailScroll.appendChild(speakerCard);
+      }
+
+      // Action items card
+      if (detail.action_items && detail.action_items.length > 0) {
+        const aiCard = document.createElement('div');
+        aiCard.className = 'detail-context';
+
+        const aiLabel = document.createElement('div');
+        aiLabel.className = 'detail-context-label';
+        aiLabel.textContent = 'Action Items';
+        aiCard.appendChild(aiLabel);
+
+        const aiList = document.createElement('div');
+        aiList.className = 'detail-action-list';
+        for (const item of detail.action_items) {
+          const row = document.createElement('div');
+          row.className = 'detail-action-item';
+          const isDone = (item.status || '').toLowerCase() === 'done';
+          const check = isDone ? '\u2611' : '\u2610';
+          const due = item.due ? ` \u00b7 ${item.due}` : '';
+          const checkSpan = document.createElement('span');
+          checkSpan.className = 'detail-action-check';
+          checkSpan.textContent = check;
+          const textSpan = document.createElement('span');
+          textSpan.className = 'detail-action-text';
+          setHighlightedText(textSpan, `${item.assignee}: ${item.task}${due}`, activeSearchQuery);
+          if (isDone) textSpan.style.textDecoration = 'line-through';
+          row.appendChild(checkSpan);
+          row.appendChild(textSpan);
+          aiList.appendChild(row);
+        }
+        aiCard.appendChild(aiList);
+        detailScroll.appendChild(aiCard);
+      }
+
+      // Decisions card
+      if (detail.decisions && detail.decisions.length > 0) {
+        const decCard = document.createElement('div');
+        decCard.className = 'detail-context';
+
+        const decLabel = document.createElement('div');
+        decLabel.className = 'detail-context-label';
+        decLabel.textContent = 'Decisions';
+        decCard.appendChild(decLabel);
+
+        const decList = document.createElement('div');
+        decList.className = 'detail-action-list';
+        for (const dec of detail.decisions) {
+          const row = document.createElement('div');
+          row.className = 'detail-action-item';
+          const topic = dec.topic ? `[${dec.topic}] ` : '';
+          const textSpan = document.createElement('span');
+          textSpan.className = 'detail-action-text';
+          setHighlightedText(textSpan, `${topic}${dec.text}`, activeSearchQuery);
+          row.appendChild(textSpan);
+          decList.appendChild(row);
+        }
+        decCard.appendChild(decList);
+        detailScroll.appendChild(decCard);
       }
 
       if (!detail.sections || detail.sections.length === 0) {
