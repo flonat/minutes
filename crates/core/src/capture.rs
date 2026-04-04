@@ -775,6 +775,8 @@ pub fn select_input_device(
 ) -> Result<cpal::Device, CaptureError> {
     use cpal::traits::{DeviceTrait, HostTrait};
 
+    tracing::info!(host_id = ?host.id(), "cpal host for input device selection");
+
     // If a specific device was requested, find it by name
     if let Some(requested) = device_name {
         if let Ok(devices) = host.input_devices() {
@@ -1099,6 +1101,7 @@ pub fn list_input_devices() -> Vec<String> {
     use cpal::traits::{DeviceTrait, HostTrait};
 
     let host = cpal::default_host();
+    tracing::info!(host_id = ?host.id(), "cpal host for input device listing");
     let mut devices = Vec::new();
 
     if let Ok(input_devices) = host.input_devices() {
@@ -1108,7 +1111,7 @@ pub fn list_input_devices() -> Vec<String> {
                     format!(
                         "{} ({}Hz, {} ch)",
                         name,
-                        config.sample_rate().0,
+                        config.sample_rate(),
                         config.channels()
                     )
                 } else {
@@ -1144,6 +1147,7 @@ pub fn list_devices_categorized() -> Vec<CategorizedDevice> {
     use cpal::traits::{DeviceTrait, HostTrait};
 
     let host = cpal::default_host();
+    tracing::info!(host_id = ?host.id(), "cpal host for categorized device listing");
     let default_name = host
         .default_input_device()
         .and_then(|d| d.name().ok())
@@ -1156,7 +1160,7 @@ pub fn list_devices_categorized() -> Vec<CategorizedDevice> {
             let Ok(name) = device.name() else { continue };
             let (sample_rate, channels) = device
                 .default_input_config()
-                .map(|c| (c.sample_rate().0, c.channels()))
+                .map(|c| (c.sample_rate(), c.channels()))
                 .unwrap_or((0, 0));
 
             let category = if is_system_audio_device_name(&name) {
