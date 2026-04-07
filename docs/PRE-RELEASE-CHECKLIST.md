@@ -150,6 +150,85 @@ After the workflows finish:
 
 If any of those are missing, investigate before assuming the release is "out".
 
+## Phase 9: Post-release surface updates
+
+There are several user-visible surfaces that live OUTSIDE the minutes repo or that are not touched by any release workflow. They will silently fall behind the latest release if you forget them. The v0.10.3 cut surfaced all of these as "missed" the first time around.
+
+### 9.1 Marketing site download link
+
+`site/app/page.tsx` has a hardcoded DMG download URL:
+
+```tsx
+href="https://github.com/silverstein/minutes/releases/latest/download/Minutes_<VERSION>_aarch64.dmg"
+```
+
+The `releases/latest` redirect IS correct, but the filename includes the version. Bump the version in the filename and push to main. The site auto-deploys.
+
+A better long-term fix would be to ship a stable filename (e.g. `Minutes-latest-aarch64.dmg` as a copied asset, or a redirect endpoint). For now, just bump.
+
+### 9.2 Homebrew tap (`silverstein/homebrew-tap`)
+
+Two files in a separate repo need updating:
+
+```ruby
+# Casks/minutes.rb
+version "X.Y.Z"
+sha256 "<sha256 of new DMG>"
+url "https://github.com/silverstein/minutes/releases/download/v#{version}/Minutes_#{version}_aarch64.dmg"
+```
+
+```ruby
+# Formula/minutes.rb
+url "https://github.com/silverstein/minutes.git", tag: "vX.Y.Z"
+```
+
+Compute the new sha256:
+
+```bash
+curl -fsSL -o /tmp/minutes.dmg "https://github.com/silverstein/minutes/releases/download/vX.Y.Z/Minutes_X.Y.Z_aarch64.dmg"
+shasum -a 256 /tmp/minutes.dmg
+```
+
+Anyone running `brew install --cask silverstein/tap/minutes` is silently stuck on the previous version until both files are updated. This is the highest-impact post-release miss.
+
+### 9.3 crates.io: not currently published
+
+`minutes-cli` and `minutes-core` are at v0.9.4 on crates.io and have NOT been published since. Reasons we are not reviving the publish:
+
+- `minutes-core` has a git dependency on a forked `pyannote-rs`, which `cargo publish` rejects.
+- Reviving requires either feature-stripping or vendoring/replacing the git dep, which is out of scope for a normal release.
+- The crates.io README badge was removed in this same cleanup.
+
+If you ever decide to revive crates.io publishing, you will need to:
+
+1. Resolve the `pyannote-rs` git dep (vendor or upstream the fork)
+2. Add `cargo publish` steps to `release-cli.yml` after the tag fires
+3. Re-add the README badge
+
+Until then, treat crates.io as not part of the release surface.
+
+### 9.4 `manifest.mcpb.json` (vestigial)
+
+This file at the repo root duplicates `manifest.json` and is not referenced by any workflow, script, or `Cargo.toml`. Search the repo: only `docs/COWORK-RESEARCH.md` mentions it.
+
+For now, bump its `version` field in lockstep with `manifest.json` so it does not become misleading. Eventually, delete this file in a separate cleanup PR after confirming no Claude Desktop install path looks for it by name.
+
+### 9.5 Final post-release verification
+
+```bash
+# Brew users get the new version
+brew update && brew upgrade --cask silverstein/tap/minutes  # check for "Already up-to-date" or actual upgrade
+
+# Site shows the right link
+curl -fsSL https://useminutes.app | grep -o "Minutes_[0-9.]*_aarch64.dmg"
+
+# npm users get the new MCP
+npx -y minutes-mcp@latest --version
+
+# Issue tracker has no v0.10.3-related "broken" reports (give it 24h)
+gh issue list --repo silverstein/minutes --search "v0.10.3 OR 0.10.3" --state all
+```
+
 ## What to do if something breaks after the tag is published
 
 [`RELEASE-CHANNELS.md`](./RELEASE-CHANNELS.md) is explicit: do not retag, do not silently replace. Cut a new patch version with the fix and call out the regression in the next release notes.
