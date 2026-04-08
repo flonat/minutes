@@ -566,7 +566,7 @@ Build with GPU support for significantly faster transcription:
 | Metal | macOS | `metal` | Xcode Command Line Tools |
 | CoreML | macOS | `coreml` | Xcode Command Line Tools |
 | CUDA | Windows/Linux | `cuda` | [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) |
-| ROCm/HIP | Linux | `hipblas` | [ROCm](https://rocm.docs.amd.com/) 6.x+ (`hipcc`, `hipblas`, `rocblas`) |
+| ROCm/HIP | Linux | `hipblas` | [ROCm](https://rocm.docs.amd.com/) 6.1+ (`hipcc`, `hipblas`, `rocblas`) |
 | Vulkan | Windows/Linux | `vulkan` | [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) |
 
 Metal is the only backend that is exercised daily by the maintainer. CUDA, ROCm/HIP,
@@ -598,6 +598,12 @@ cargo install --path crates/cli --features vulkan
 > $env:CMAKE_GENERATOR = "NMake Makefiles"
 > ```
 > The first CUDA build takes longer than usual (compiling GPU kernels) — this is a one-time cost.
+
+> **ROCm/HIP users:** The build expects ROCm installed at `/opt/rocm`. If your
+> installation is elsewhere, set `HIP_PATH` before building:
+> ```bash
+> export HIP_PATH=/path/to/rocm
+> ```
 
 ### Setup (all platforms)
 
