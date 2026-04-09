@@ -66,8 +66,11 @@ function renderClaudePluginManifestText(manifest: ClaudePluginManifest): string 
   }
 
   if (manifest.hooks) {
-    lines.push("  \"hooks\": ");
-    lines.push(indentBlock(renderUnknown(manifest.hooks, 2), 2));
+    const renderedHooks = renderUnknown(manifest.hooks, 2).split("\n");
+    if (renderedHooks.length > 0) {
+      lines.push(`  "hooks": ${renderedHooks[0]}`);
+      lines.push(...renderedHooks.slice(1).map((line) => `  ${line}`));
+    }
   }
 
   if (lines[lines.length - 1]?.endsWith(",")) {

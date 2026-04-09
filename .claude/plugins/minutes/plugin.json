@@ -25,8 +25,7 @@
   "agents": [
     { "name": "meeting-analyst", "path": "agents/meeting-analyst.md" }
   ],
-  "hooks": 
-  {
+  "hooks": {
       "SessionStart": [
         {
           "matcher": "startup",
