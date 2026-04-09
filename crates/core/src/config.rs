@@ -331,6 +331,10 @@ pub struct RecordingConfig {
     /// When set, `device` is ignored. CLI `--source` flags override this.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sources: Option<SourcesConfig>,
+    /// Keep the WAV file after processing instead of deleting it.
+    /// Useful when an external tool (e.g., an offload script) needs the audio
+    /// after transcription completes. Default: false.
+    pub keep_wav: bool,
 }
 
 /// Multi-source capture configuration.
@@ -355,6 +359,7 @@ impl Default for RecordingConfig {
             auto_call_intent: false,
             allow_degraded_call_capture: false,
             sources: None,
+            keep_wav: false,
         }
     }
 }

@@ -399,9 +399,14 @@ fn terminal_state_for_artifact(artifact: &pipeline::TranscriptArtifact) -> JobSt
     }
 }
 
-/// Move the captured WAV alongside the output markdown so users can reprocess later.
+/// Move (or copy, when `keep_wav` is true) the captured WAV alongside the output
+/// markdown so users can reprocess later.
 /// e.g. ~/meetings/2026-04-02-standup.md → ~/meetings/2026-04-02-standup.wav
-fn preserve_audio_alongside_output(job: &ProcessingJob) {
+///
+/// When `keep_wav` is true the original WAV in the jobs directory is preserved so
+/// that external tools (e.g., an offload script) can still access it at the
+/// original `audio_path` recorded in the job JSON.
+fn preserve_audio_alongside_output(job: &ProcessingJob, keep_wav: bool) {
     let Some(ref output_path) = job.output_path else {
         return;
     };
@@ -411,7 +416,19 @@ fn preserve_audio_alongside_output(job: &ProcessingJob) {
         return;
     }
     let audio_dest = output.with_extension("wav");
-    if let Err(e) = fs::rename(&audio_src, &audio_dest) {
+    if keep_wav {
+        // Copy so the original stays in the jobs dir for offload scripts
+        if let Err(e) = fs::copy(&audio_src, &audio_dest) {
+            tracing::warn!(
+                src = %audio_src.display(),
+                dest = %audio_dest.display(),
+                error = %e,
+                "failed to copy audio alongside output"
+            );
+            return;
+        }
+        tracing::info!(path = %audio_src.display(), "keep_wav enabled — original audio preserved");
+    } else if let Err(e) = fs::rename(&audio_src, &audio_dest) {
         // rename fails across filesystems; fall back to copy + delete
         if let Err(e2) = fs::copy(&audio_src, &audio_dest) {
             tracing::warn!(
@@ -431,16 +448,22 @@ fn preserve_audio_alongside_output(job: &ProcessingJob) {
         fs::set_permissions(&audio_dest, fs::Permissions::from_mode(0o600)).ok();
     }
     // Clean up any screen capture artifacts left in the jobs dir
-    let screens_dir = crate::screen::screens_dir_for(&audio_src);
-    if screens_dir.exists() {
-        fs::remove_dir_all(screens_dir).ok();
+    if !keep_wav {
+        let screens_dir = crate::screen::screens_dir_for(&audio_src);
+        if screens_dir.exists() {
+            fs::remove_dir_all(screens_dir).ok();
+        }
     }
-    // Update the job record so audio_path points to the new location
-    let dest_str = audio_dest.display().to_string();
-    update_job_state(&job.id, |j| {
-        j.audio_path = dest_str;
-    })
-    .ok();
+    // Update the job record so audio_path points to the new location.
+    // When keep_wav is true, keep the original path so offload scripts
+    // can find the WAV in the jobs directory.
+    if !keep_wav {
+        let dest_str = audio_dest.display().to_string();
+        update_job_state(&job.id, |j| {
+            j.audio_path = dest_str;
+        })
+        .ok();
+    }
     tracing::info!(
         path = %audio_dest.display(),
         "preserved audio alongside transcript"
@@ -664,7 +687,7 @@ where
                 // Run post_record hook (async, non-blocking)
                 pipeline::run_post_record_hook(config, &result.path);
                 if completed_job.state == JobState::Complete {
-                    preserve_audio_alongside_output(&completed_job);
+                    preserve_audio_alongside_output(&completed_job, config.recording.keep_wav);
                 }
                 // Reload job after preserve may have updated audio_path
                 let final_job = load_job(&completed_job.id).unwrap_or(completed_job);
