@@ -2267,8 +2267,32 @@
         display: none;
       }
 
+      .footer.capture-mode {
+        padding-top: 0;
+      }
+
+      .footer.capture-mode .footer-action-primary,
+      .footer.capture-mode .footer-device-picker {
+        display: none;
+      }
+
+      .footer.capture-mode .footer-actions {
+        grid-template-columns: 1fr;
+      }
+
+      .footer.capture-mode .footer-action-secondary {
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+
       .btn {
         transition: transform 0.17s ease, background-color 0.17s ease, border-color 0.17s ease, color 0.17s ease, opacity 0.17s ease, box-shadow 0.17s ease;
+      }
+
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
       }
 
       .btn-icon {
@@ -3277,6 +3301,8 @@
     const recoveryCount = document.getElementById('recovery-count');
     const recoveryScroll = document.getElementById('recovery-scroll');
     const recoverySubtitle = document.getElementById('recovery-subtitle');
+    const recordButton = document.getElementById('btn-record');
+    const liveButton = document.getElementById('btn-live');
     const quickThoughtButton = document.getElementById('btn-quick-thought');
     const openOutputFolderButton = document.getElementById('btn-open-output-folder');
     const aboutTrayCopy = document.getElementById('about-tray-copy');
@@ -3719,7 +3745,7 @@
           isLiveTranscript = false;
           callBanner.classList.remove('active');
           if (activeCallSession) activeCallSession.dismissed = true;
-          footer.classList.add('footer-hidden');
+          setFooterCaptureMode(true, 'recording');
           if (status.elapsed) recordingTime.textContent = status.elapsed;
           updateViz(status.audioLevel || 0);
 
@@ -3739,7 +3765,7 @@
           liveBar.classList.remove('active'); // T4
           isLiveTranscript = false;
           callBanner.classList.remove('active');
-          footer.classList.remove('footer-hidden');
+          setFooterCaptureMode(false);
           processingStage.textContent = status.processingStage || 'Preparing transcript...';
 
           // Start elapsed timer when processing begins
@@ -3775,7 +3801,7 @@
               recordingBar.classList.remove('active');
               processingBar.classList.remove('active');
               liveBar.classList.add('active');
-              footer.classList.add('footer-hidden');
+              setFooterCaptureMode(true, 'live');
               const n = liveStatus.line_count || 0;
               const d = Math.round(liveStatus.duration_secs || 0);
               const min = Math.floor(d / 60);
@@ -3801,7 +3827,7 @@
           processingSummary.textContent = '';
           processingJobsEl.replaceChildren();
           quickNote.classList.remove('active');
-          footer.classList.remove('footer-hidden');
+          setFooterCaptureMode(false);
 
           if (activeCallSession && !activeCallSession.dismissed) {
             callBanner.classList.add('active');
@@ -3876,6 +3902,30 @@
       cueToggle.classList.toggle('btn-primary', enabled);
       cueToggle.classList.toggle('btn-secondary', !enabled);
       localStorage.setItem('minutes.playCaptureCues', enabled ? 'true' : 'false');
+    }
+
+    function setFooterCaptureMode(active, reason = null) {
+      if (active) {
+        footer.classList.remove('footer-hidden');
+      }
+      footer.classList.toggle('capture-mode', active);
+
+      recordButton.disabled = active;
+      liveButton.disabled = active;
+      quickThoughtButton.disabled = active;
+
+      if (active) {
+        const tooltip = reason === 'live'
+          ? 'Live transcript is already running. Use the live bar to stop it.'
+          : 'Finish the current recording before starting another capture.';
+        recordButton.title = tooltip;
+        liveButton.title = tooltip;
+        quickThoughtButton.title = tooltip;
+      } else {
+        recordButton.title = '';
+        liveButton.title = 'Start live transcription — ask your agent in Recall for coaching';
+        quickThoughtButton.title = '';
+      }
     }
 
     function setHotkeyStatus(text, isError = false) {
@@ -6561,7 +6611,7 @@
     currentWindow.listen('live-transcript:started', () => {
       isLiveTranscript = true;
       liveBar.classList.add('active');
-      footer.classList.add('footer-hidden');
+      setFooterCaptureMode(true, 'live');
       statusPill.className = 'status-pill live';
       statusPill.textContent = 'live';
       startFastPoll();
@@ -6571,7 +6621,7 @@
     currentWindow.listen('live-transcript:stopped', (event) => {
       isLiveTranscript = false;
       liveBar.classList.remove('active');
-      footer.classList.remove('footer-hidden');
+      setFooterCaptureMode(false);
       statusPill.className = 'status-pill';
       statusPill.textContent = 'idle';
       stopFastPoll();
@@ -6582,7 +6632,7 @@
     currentWindow.listen('live-transcript:error', (event) => {
       isLiveTranscript = false;
       liveBar.classList.remove('active');
-      footer.classList.remove('footer-hidden');
+      setFooterCaptureMode(false);
       statusPill.className = 'status-pill';
       statusPill.textContent = 'idle';
       stopFastPoll();
