@@ -337,8 +337,22 @@ try {
       // The instruction block tells Claude how to respond to user actions
       // (snooze / disable) by writing the appropriate state files, since
       // the hook itself can't run AskUserQuestion.
+      //
+      // The recommended upgrade sequence is TWO commands plus a restart, NOT
+      // a single /plugin update. Claude Code's marketplace is backed by a
+      // local git mirror at ~/.claude/plugins/marketplaces/<name>/ that only
+      // refreshes when you explicitly ask for it — /plugin update alone
+      // consults the stale mirror and reports "already at latest" even when
+      // the upstream has moved far ahead. You must refresh the mirror first.
+      // See docs/PRE-RELEASE-CHECKLIST.md for the full background on why.
       if (remoteVersion && isNewer(localVersion, remoteVersion) && !isSnoozed(remoteVersion)) {
-        updateContext = `\n\nMinutes plugin update available: v${remoteVersion} (user is on v${localVersion}). Mention it ONCE in ONE line early in the response — do not harp on it. Tell them: run \`/plugin update minutes\` to get the latest skills and bug fixes.
+        updateContext = `\n\nMinutes plugin update available: v${remoteVersion} (user is on v${localVersion}). Mention it ONCE in ONE line early in the response — do not harp on it. Tell them the upgrade takes THREE steps, because Claude Code's marketplace has a local git mirror that must be refreshed first:
+
+  1. /plugin marketplace update minutes   (git-pulls the local marketplace mirror so Claude Code knows v${remoteVersion} exists)
+  2. /plugin update minutes@minutes       (installs the new version into the cache — this step alone is a no-op if you skip step 1)
+  3. Restart Claude Code                  (loads the new skills, hooks, and scripts into the session)
+
+A plain \`/plugin update minutes\` by itself will report "already at latest" because the mirror is stuck — this is a real marketplace quirk, not user error. Give them the full three-step sequence every time.
 
 If the user says "snooze", "not now", "remind me later", or similar: read ~/.minutes/update-snoozed if it exists (format: "<version> <level> <epoch>"), increment level (cap at 3), and write "${remoteVersion} <new_level> $(date +%s)" back. Levels: 1=24h, 2=48h, 3+=7d quiet.
 
