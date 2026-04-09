@@ -114,7 +114,7 @@ Claude: [searches meetings] → synthesizes answer from transcripts
 | CoreML | macOS | `coreml` | Xcode Command Line Tools |
 | CUDA | Windows/Linux | `cuda` | [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) |
 | ROCm/HIP | Linux | `hipblas` | [ROCm](https://rocm.docs.amd.com/) 6.1+ (`hipcc`, `hipblas`, `rocblas`) |
-| Vulkan | Windows/Linux | `vulkan` | [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) |
+| Vulkan | Windows/Linux | `vulkan` | [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) (+ `vulkan-headers` on Arch) |
 
 Metal is the only backend that is exercised daily by the maintainer. CUDA, ROCm/HIP,
 and Vulkan should be considered experimental: they wire through to whisper.cpp via
@@ -128,8 +128,20 @@ cargo install minutes-cli --features hipblas  # AMD ROCm/HIP (experimental)
 cargo install minutes-cli --features vulkan   # Vulkan (experimental)
 ```
 
+> **Windows CUDA users:** You may need to set environment variables before building:
+> ```powershell
+> $env:CUDA_PATH = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.4"
+> $env:CMAKE_CUDA_COMPILER = "$env:CUDA_PATH\bin\nvcc.exe"
+> $env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
+> $env:CMAKE_GENERATOR = "NMake Makefiles"
+> ```
+> The first CUDA build takes longer than usual (compiling GPU kernels) — this is a one-time cost.
+
 > **ROCm/HIP users:** The build expects ROCm installed at `/opt/rocm`. If your
-> installation is elsewhere, set `HIP_PATH` before building.
+> installation is elsewhere, set `HIP_PATH` before building:
+> ```bash
+> export HIP_PATH=/path/to/rocm
+> ```
 >
 > **Vulkan users:** On Windows and macOS, set `VULKAN_SDK` to your SDK install
 > root before building. On Linux, `whisper-rs-sys` links against the system

@@ -567,7 +567,7 @@ Build with GPU support for significantly faster transcription:
 | CoreML | macOS | `coreml` | Xcode Command Line Tools |
 | CUDA | Windows/Linux | `cuda` | [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) |
 | ROCm/HIP | Linux | `hipblas` | [ROCm](https://rocm.docs.amd.com/) 6.1+ (`hipcc`, `hipblas`, `rocblas`) |
-| Vulkan | Windows/Linux | `vulkan` | [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) |
+| Vulkan | Windows/Linux | `vulkan` | [Vulkan SDK](https://vulkan.lunarg.com/sdk/home) (+ `vulkan-headers` on Arch) |
 
 Metal is the only backend that is exercised daily by the maintainer. CUDA, ROCm/HIP,
 and Vulkan should be considered experimental: they wire through to whisper.cpp via
