@@ -119,10 +119,10 @@ export default function BestMeetingToolsPage() {
           Best meeting tools for Claude Code and Codex
         </h1>
         <p className="mt-5 text-[17px] leading-8 text-[var(--text-secondary)]">
-          If your real workflow is Claude Code, Codex, MCP, and durable meeting memory, the best
-          tool is not automatically the one with the flashiest summary UI. The right choice depends
-          on whether you want a hosted assistant for teams, a polished AI notepad, or a local-first
-          memory layer your agents can actually use across tools.
+          If your real workflow runs through Claude Code, Codex, MCP, and durable meeting memory,
+          the best tool is not automatically the one with the prettiest summary UI. The real split
+          is simpler than that: do you want a hosted assistant for teams, a polished AI notepad, or
+          a local-first memory layer your agents can actually use across tools?
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <span className="rounded-full bg-[var(--bg-elevated)] px-3 py-1 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">
@@ -218,8 +218,8 @@ export default function BestMeetingToolsPage() {
             assistant with stronger team and integration posture.
           </p>
           <p>
-            The category only becomes clearer when you stop asking “which app summarizes meetings
-            best?” and start asking “which workflow am I actually trying to support?”
+            The category gets much clearer once you stop asking “which app summarizes meetings
+            best?” and start asking “what workflow am I actually trying to support?”
           </p>
         </div>
       </section>

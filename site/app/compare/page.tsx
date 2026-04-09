@@ -58,9 +58,8 @@ export default function CompareHubPage() {
           Compare Minutes
         </h1>
         <p className="mt-5 text-[17px] leading-8 text-[var(--text-secondary)]">
-          These comparison pages are fit-based, not teardown posts. The goal is to help the right
-          user pick the right product and make the Minutes wedge clear without pretending every tool
-          should do the same job.
+          These are buying guides, not teardown posts. The point is simple: some people should pick
+          Minutes, and some should not. We want that to be obvious as quickly as possible.
         </p>
       </section>
 

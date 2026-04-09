@@ -81,11 +81,10 @@ export default function OpenSourceAlternativesToGranolaPage() {
           Open-source alternatives to Granola AI
         </h1>
         <p className="mt-5 text-[17px] leading-8 text-[var(--text-secondary)]">
-          If you like the idea of Granola AI but want something open-source, the right alternative
-          depends on what you are actually optimizing for. The best open-source option is not
-          always the one that looks most like Granola. It might be the one that gives you better
-          local control, more inspectable output, or a workflow that fits your assistants and
-          tools.
+          If you like the idea of Granola AI but want something open-source, don’t assume the best
+          option is the one that looks most similar. In practice, the better alternative is often
+          the one that gives you more control, more inspectable output, or a workflow that actually
+          fits the way you already use assistants and tools.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <span className="rounded-full bg-[var(--bg-elevated)] px-3 py-1 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">
@@ -168,7 +167,8 @@ export default function OpenSourceAlternativesToGranolaPage() {
           </p>
           <p>
             Open-source alternatives are strongest when you care about control, inspectability,
-            local processing, and adapting the workflow to your own stack.
+            local processing, and adapting the workflow to your own stack. If what you really want
+            is the polished hosted Granola experience, it is better to say that plainly.
           </p>
         </div>
       </section>
