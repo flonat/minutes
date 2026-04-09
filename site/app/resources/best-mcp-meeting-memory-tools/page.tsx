@@ -71,6 +71,9 @@ export default function BestMcpMeetingMemoryToolsPage() {
           minutes
         </a>
         <div className="flex gap-5 text-sm text-[var(--text-secondary)]">
+          <a href="/resources/best-mcp-meeting-memory-tools.md" className="hover:text-[var(--accent)]">
+            page.md
+          </a>
           <a href="/for-agents" className="hover:text-[var(--accent)]">
             for agents
           </a>
