@@ -1,0 +1,37 @@
+timestamp,tool,file_path,action,details
+2026-03-31 17:33:22,Bash,-,executed,"cd /Users/florianburnat/Task-Management/packages/minutes && export CXXFLAGS=""-I$(xcrun --show-sdk-path)/usr/include/c++/v1"" && cargo build --release -p minutes-cli 2>&1 | tail -10"
+2026-03-31 17:33:36,Bash,-,executed,"# Install to user local bin instead
+mkdir -p ~/.local/bin && cp /Users/florianburnat/Task-Management/packages/minutes/target/release/minutes ~/.local/bin/minutes && ~/.local/bin/minutes --version 2>&1"
+2026-03-31 17:33:41,Bash,-,executed,"# Check if ~/.local/bin is in PATH and takes priority
+which -a minutes 2>&1"
+2026-03-31 19:28:51,Edit,/Users/florianburnat/.config/minutes/config.toml,modified,
+2026-03-31 19:29:02,Bash,-,executed,"SwitchAudioSource -t input -s ""MacBook Pro Microphone"" 2>&1 && echo ""---"" && SwitchAudioSource -c -t input 2>&1"
+2026-03-31 19:29:40,Bash,-,executed,"minutes record -v --title ""device-config-test"" > /tmp/minutes-device-test.log 2>&1 &
+RPID=$!
+sleep 3
+minutes stop 2>&1
+sleep 5
+cat /tmp/minutes-device-test.log"
+2026-03-31 20:01:19,Edit,/Users/florianburnat/Task-Management/packages/minutes/crates/core/src/config.rs,modified,
+2026-03-31 20:01:24,Edit,/Users/florianburnat/Task-Management/packages/minutes/crates/core/src/config.rs,modified,
+2026-03-31 20:02:26,Edit,/Users/florianburnat/Task-Management/packages/minutes/crates/core/src/capture.rs,modified,
+2026-03-31 20:02:34,Edit,/Users/florianburnat/Task-Management/packages/minutes/crates/core/src/capture.rs,modified,
+2026-03-31 20:03:20,Edit,/Users/florianburnat/Task-Management/packages/minutes/crates/core/src/capture.rs,modified,
+2026-03-31 20:56:19,Edit,/Users/florianburnat/.config/minutes/config.toml,modified,
+2026-03-31 20:56:41,Bash,-,executed,"export CXXFLAGS=""-I$(xcrun --show-sdk-path)/usr/include/c++/v1"" && cargo build --release -p minutes-cli 2>&1"
+2026-03-31 20:56:49,Bash,-,executed,cp /Users/florianburnat/Task-Management/packages/minutes/target/release/minutes ~/.local/bin/minutes && minutes devices 2>&1
+2026-04-09 21:21:20,Bash,-,executed,"cd /Users/florianburnat/Task-Management/packages/minutes && export CXXFLAGS=""-I$(xcrun --show-sdk-path)/usr/include/c++/v1"" && cargo check --no-default-features 2>&1 | tail -20"
+2026-04-09 21:24:09,Edit,/Users/florianburnat/.config/minutes/config.toml,modified,
+2026-04-09 21:24:34,Bash,-,executed,"export CXXFLAGS=""-I$(xcrun --show-sdk-path)/usr/include/c++/v1"" && cargo build --release -p minutes-cli 2>&1 | tail -5"
+2026-04-09 21:24:43,Bash,-,executed,cp /Users/florianburnat/Task-Management/packages/minutes/target/release/minutes ~/.local/bin/minutes
+2026-04-09 21:29:51,Edit,/Users/florianburnat/Task-Management/docs/guides/minutes.md,modified,
+2026-04-09 21:30:01,Edit,/Users/florianburnat/Task-Management/docs/guides/minutes.md,modified,
+2026-04-09 21:30:14,Edit,/Users/florianburnat/Task-Management/docs/guides/minutes.md,modified,
+2026-04-09 21:30:21,Edit,/Users/florianburnat/Task-Management/docs/guides/minutes.md,modified,
+2026-04-09 21:30:27,Edit,/Users/florianburnat/Task-Management/docs/guides/minutes.md,modified,
+2026-04-09 21:30:37,Edit,/Users/florianburnat/Task-Management/docs/guides/minutes.md,modified,
+2026-04-09 22:59:59,Bash,-,executed,cd /Users/florianburnat/Task-Management/packages/minutes && git remote add flonat https://github.com/flonat/minutes.git && git remote -v
+2026-04-09 23:00:15,Bash,-,executed,"git add crates/core/src/config.rs crates/core/src/jobs.rs && git commit -m ""$(cat <<'EOF'
+Add keep_wav config to preserve audio after local transcription
+
+New `recording.keep_wav` option (default: fal"

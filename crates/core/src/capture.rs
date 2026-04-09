@@ -482,6 +482,184 @@ fn build_capture_stream(
     Ok(stream)
 }
 
+/// Shared buffer for collecting resampled audio samples from a capture stream.
+/// Used in dual-stream mode where mixing happens in the main loop.
+type SampleBuffer = Arc<std::sync::Mutex<Vec<i16>>>;
+
+/// Build a cpal input stream that writes resampled 16kHz mono samples into a buffer.
+/// Used for dual-stream capture where two streams are mixed in the main loop.
+/// Unlike `build_capture_stream`, this does not write to the WAV writer or update
+/// AUDIO_LEVEL — the caller handles mixing, level metering, and WAV output.
+fn build_capture_stream_to_buffer(
+    device: &cpal::Device,
+    buffer: &SampleBuffer,
+    stop_flag: &Arc<AtomicBool>,
+    err_flag: &Arc<AtomicBool>,
+) -> Result<cpal::Stream, CaptureError> {
+    use cpal::traits::{DeviceTrait, StreamTrait};
+
+    let supported_config = device
+        .default_input_config()
+        .map_err(|e| CaptureError::Io(std::io::Error::other(format!("input config: {}", e))))?;
+
+    let sample_rate = supported_config.sample_rate().0;
+    let channels = supported_config.channels();
+    let ratio = sample_rate as f64 / 16000.0;
+
+    tracing::info!(
+        sample_rate,
+        channels,
+        format = ?supported_config.sample_format(),
+        "buffered capture config"
+    );
+
+    let buffer_clone = Arc::clone(buffer);
+    let stop_clone = Arc::clone(stop_flag);
+    let err_flag_clone = Arc::clone(err_flag);
+
+    let stream = match supported_config.sample_format() {
+        cpal::SampleFormat::F32 => {
+            let ch = channels as usize;
+            let mut resample_pos: f64 = 0.0;
+            let mut input_samples: Vec<f32> = Vec::new();
+
+            device
+                .build_input_stream(
+                    &supported_config.into(),
+                    move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                        if stop_clone.load(Ordering::Relaxed) {
+                            return;
+                        }
+                        for chunk in data.chunks(ch) {
+                            let mono: f32 = chunk.iter().sum::<f32>() / ch as f32;
+                            input_samples.push(mono);
+                        }
+                        // Resample to 16kHz
+                        let mut resampled = Vec::new();
+                        while resample_pos < input_samples.len() as f64 {
+                            let idx = resample_pos as usize;
+                            if idx < input_samples.len() {
+                                let sample = (input_samples[idx] * 32767.0)
+                                    .clamp(-32768.0, 32767.0)
+                                    as i16;
+                                resampled.push(sample);
+                            }
+                            resample_pos += ratio;
+                        }
+                        let consumed = resample_pos as usize;
+                        if consumed > 0 && consumed <= input_samples.len() {
+                            input_samples.drain(..consumed);
+                            resample_pos -= consumed as f64;
+                        }
+                        if !resampled.is_empty() {
+                            buffer_clone.lock().unwrap().extend_from_slice(&resampled);
+                        }
+                    },
+                    move |err| {
+                        tracing::error!("buffered stream error: {}", err);
+                        err_flag_clone.store(true, Ordering::Relaxed);
+                    },
+                    None,
+                )
+                .map_err(|e| {
+                    CaptureError::Io(std::io::Error::other(format!("build stream: {}", e)))
+                })?
+        }
+        cpal::SampleFormat::I16 => {
+            let ch = channels as usize;
+            let mut resample_pos: f64 = 0.0;
+            let mut input_samples: Vec<f32> = Vec::new();
+
+            device
+                .build_input_stream(
+                    &supported_config.into(),
+                    move |data: &[i16], _: &cpal::InputCallbackInfo| {
+                        if stop_clone.load(Ordering::Relaxed) {
+                            return;
+                        }
+                        for chunk in data.chunks(ch) {
+                            let mono: f32 =
+                                chunk.iter().map(|&s| s as f32 / 32768.0).sum::<f32>() / ch as f32;
+                            input_samples.push(mono);
+                        }
+                        let mut resampled = Vec::new();
+                        while resample_pos < input_samples.len() as f64 {
+                            let idx = resample_pos as usize;
+                            if idx < input_samples.len() {
+                                let sample = (input_samples[idx] * 32767.0)
+                                    .clamp(-32768.0, 32767.0)
+                                    as i16;
+                                resampled.push(sample);
+                            }
+                            resample_pos += ratio;
+                        }
+                        let consumed = resample_pos as usize;
+                        if consumed > 0 && consumed <= input_samples.len() {
+                            input_samples.drain(..consumed);
+                            resample_pos -= consumed as f64;
+                        }
+                        if !resampled.is_empty() {
+                            buffer_clone.lock().unwrap().extend_from_slice(&resampled);
+                        }
+                    },
+                    move |err| {
+                        tracing::error!("buffered stream error: {}", err);
+                        err_flag_clone.store(true, Ordering::Relaxed);
+                    },
+                    None,
+                )
+                .map_err(|e| {
+                    CaptureError::Io(std::io::Error::other(format!("build stream: {}", e)))
+                })?
+        }
+        format => {
+            return Err(CaptureError::Io(std::io::Error::other(format!(
+                "unsupported sample format: {:?}",
+                format
+            ))));
+        }
+    };
+
+    stream
+        .play()
+        .map_err(|e| CaptureError::Io(std::io::Error::other(format!("stream play: {}", e))))?;
+
+    Ok(stream)
+}
+
+/// Try to reconnect a buffered mic stream (for dual-stream mode).
+fn try_reconnect_buffered(
+    host: &cpal::Host,
+    device_override: Option<&str>,
+    buffer: &SampleBuffer,
+    stop_flag: &Arc<AtomicBool>,
+    err_flag: &Arc<AtomicBool>,
+) -> Option<(cpal::Stream, String)> {
+    use cpal::traits::DeviceTrait;
+    err_flag.store(false, Ordering::Relaxed);
+
+    let device = match select_input_device(host, device_override) {
+        Ok(d) => d,
+        Err(e) => {
+            tracing::warn!("reconnect: device selection failed: {}", e);
+            return None;
+        }
+    };
+
+    let name = device.name().unwrap_or_else(|_| "unknown".into());
+
+    match build_capture_stream_to_buffer(&device, buffer, stop_flag, err_flag) {
+        Ok(stream) => {
+            tracing::info!(device = %name, "buffered stream reconnected");
+            Some((stream, name))
+        }
+        Err(e) => {
+            tracing::warn!(device = %name, "reconnect failed: {}", e);
+            None
+        }
+    }
+}
+
 /// Try to reconnect to the current default audio device.
 /// Returns the new stream and device name on success.
 fn try_reconnect(
@@ -537,6 +715,11 @@ pub fn record_to_wav(
 
     // Clear any stale stop sentinel from a previous session
     crate::pid::check_and_clear_sentinel();
+
+    // Dual-stream mode: capture mic + loopback (e.g., BlackHole) simultaneously
+    if config.recording.loopback_device.is_some() {
+        return record_to_wav_dual(output_path, stop_flag, config);
+    }
 
     let host = cpal::default_host();
     let device_override = config.recording.device.as_deref();
@@ -1267,6 +1450,302 @@ fn send_device_change_notification(old_device: &str, new_device: &str) {
     {
         eprintln!("[minutes] {}", body);
     }
+}
+
+/// Dual-stream recording: captures from mic + loopback device simultaneously.
+/// The mic follows the system default (or `recording.device` override), while the
+/// loopback device captures system audio (e.g., BlackHole 2ch via Multi-Output Device).
+/// Both streams are resampled to 16kHz mono and mixed into a single WAV file.
+fn record_to_wav_dual(
+    output_path: &Path,
+    stop_flag: Arc<AtomicBool>,
+    config: &Config,
+) -> Result<(), CaptureError> {
+    use cpal::traits::DeviceTrait;
+
+    let host = cpal::default_host();
+    let device_override = config.recording.device.as_deref();
+    let loopback_name = config
+        .recording
+        .loopback_device
+        .as_deref()
+        .expect("loopback_device must be set for dual-stream capture");
+
+    // Select both devices
+    let mic_device = select_input_device(&host, device_override)?;
+    let mic_name = mic_device.name().unwrap_or_else(|_| "unknown".into());
+
+    let loopback_device = select_input_device(&host, Some(loopback_name))?;
+    let loopback_device_name = loopback_device.name().unwrap_or_else(|_| "unknown".into());
+
+    eprintln!(
+        "[minutes] Dual-stream capture: mic={}, loopback={}",
+        mic_name, loopback_device_name
+    );
+    tracing::info!(mic = %mic_name, loopback = %loopback_device_name, "dual-stream capture");
+
+    // Create WAV writer — 16kHz mono 16-bit for whisper
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let wav_spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: 16000,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+
+    let writer = hound::WavWriter::create(output_path, wav_spec)
+        .map_err(|e| CaptureError::Io(std::io::Error::other(format!("WAV create: {}", e))))?;
+    let writer = Arc::new(std::sync::Mutex::new(Some(writer)));
+
+    let sample_count = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    AUDIO_LEVEL.store(0, Ordering::Relaxed);
+
+    // Buffers for both streams
+    let mic_buffer: SampleBuffer = Arc::new(std::sync::Mutex::new(Vec::with_capacity(16000)));
+    let loopback_buffer: SampleBuffer =
+        Arc::new(std::sync::Mutex::new(Vec::with_capacity(16000)));
+    let mic_err = Arc::new(AtomicBool::new(false));
+    let loopback_err = Arc::new(AtomicBool::new(false));
+
+    // Build both capture streams
+    let mut mic_stream = Some(build_capture_stream_to_buffer(
+        &mic_device,
+        &mic_buffer,
+        &stop_flag,
+        &mic_err,
+    )?);
+    let _loopback_stream = build_capture_stream_to_buffer(
+        &loopback_device,
+        &loopback_buffer,
+        &stop_flag,
+        &loopback_err,
+    )?;
+
+    tracing::info!("dual-stream capture started");
+
+    // Device change monitor (mic only — loopback device is fixed)
+    let mut device_monitor = crate::device_monitor::DeviceMonitor::new(&mic_name);
+    let mut current_mic_name = mic_name;
+
+    // Screen context capture
+    let _screen_handle = if config.screen_context.enabled {
+        if !crate::screen::check_screen_permission() {
+            eprintln!(
+                "[minutes] Screen context disabled — grant Screen Recording permission in System Settings > Privacy & Security"
+            );
+            None
+        } else {
+            let screen_dir = crate::screen::screens_dir_for(output_path);
+            match crate::screen::start_capture(
+                &screen_dir,
+                std::time::Duration::from_secs(config.screen_context.interval_secs),
+                Arc::clone(&stop_flag),
+            ) {
+                Ok(handle) => {
+                    eprintln!(
+                        "[minutes] Screen context capture enabled (every {}s)",
+                        config.screen_context.interval_secs
+                    );
+                    Some(handle)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "screen capture init failed: {} — continuing without screen context",
+                        e
+                    );
+                    None
+                }
+            }
+        }
+    } else {
+        None
+    };
+
+    // Silence detection state
+    let silence_threshold = config.recording.silence_threshold;
+    let silence_reminder_secs = config.recording.silence_reminder_secs;
+    let mut silence_start: Option<std::time::Instant> = None;
+    let mut silence_notified = false;
+
+    // Main loop: drain buffers, mix, write to WAV
+    while !stop_flag.load(Ordering::Relaxed) {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        if crate::pid::check_and_clear_sentinel() {
+            tracing::info!("stop sentinel detected — stopping recording");
+            break;
+        }
+
+        // Drain both buffers
+        let mic_samples: Vec<i16> = mic_buffer.lock().unwrap().drain(..).collect();
+        let loopback_samples: Vec<i16> = loopback_buffer.lock().unwrap().drain(..).collect();
+
+        // Update audio level from mic samples
+        if !mic_samples.is_empty() {
+            let sum_sq: f64 = mic_samples
+                .iter()
+                .map(|&s| (s as f64) * (s as f64))
+                .sum();
+            let rms = (sum_sq / mic_samples.len() as f64).sqrt();
+            let level = (rms / 32768.0 * 2000.0).min(100.0) as u32;
+            AUDIO_LEVEL.store(level, Ordering::Relaxed);
+        }
+
+        // Mix and write to WAV
+        let mix_len = mic_samples.len().max(loopback_samples.len());
+        if mix_len > 0 {
+            let mut guard = writer.lock().unwrap();
+            if let Some(ref mut w) = *guard {
+                for i in 0..mix_len {
+                    let m = mic_samples.get(i).copied().unwrap_or(0) as i32;
+                    let l = loopback_samples.get(i).copied().unwrap_or(0) as i32;
+                    let mixed = (m + l).clamp(-32768, 32767) as i16;
+                    if w.write_sample(mixed).is_err() {
+                        break;
+                    }
+                    sample_count.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        }
+
+        // Check for mic device change or stream error
+        let should_reconnect = if mic_err.load(Ordering::Relaxed) {
+            tracing::warn!("mic stream error — checking for device change");
+            true
+        } else if device_monitor.has_device_changed() {
+            tracing::info!("default audio device changed — will reconnect mic");
+            true
+        } else {
+            false
+        };
+
+        let silence_triggered = if !should_reconnect && silence_reminder_secs > 0 {
+            let level = audio_level();
+            if level <= silence_threshold {
+                let start = silence_start.get_or_insert_with(std::time::Instant::now);
+                let silent_secs = start.elapsed().as_secs();
+                if silent_secs >= DEVICE_CHECK_SILENCE_SECS && device_monitor.has_device_changed()
+                {
+                    true
+                } else if silent_secs >= silence_reminder_secs && !silence_notified {
+                    silence_notified = true;
+                    tracing::info!(
+                        silent_secs,
+                        "silence detected — sending reminder notification"
+                    );
+                    send_silence_notification(silent_secs);
+                    false
+                } else {
+                    false
+                }
+            } else {
+                if silence_notified {
+                    tracing::info!("audio resumed after silence notification");
+                }
+                silence_start = None;
+                silence_notified = false;
+                false
+            }
+        } else {
+            false
+        };
+
+        if should_reconnect || silence_triggered {
+            // Drop old mic stream before rebuilding
+            mic_stream.take();
+            mic_err.store(false, Ordering::Relaxed);
+
+            // Try reconnecting mic (with one retry after 1s)
+            let reconnected = try_reconnect_buffered(
+                &host,
+                device_override,
+                &mic_buffer,
+                &stop_flag,
+                &mic_err,
+            )
+            .or_else(|| {
+                tracing::info!("mic reconnect failed, retrying in 1s...");
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                try_reconnect_buffered(
+                    &host,
+                    device_override,
+                    &mic_buffer,
+                    &stop_flag,
+                    &mic_err,
+                )
+            });
+
+            match reconnected {
+                Some((new_stream, new_name)) => {
+                    let old = current_mic_name.clone();
+                    current_mic_name = new_name;
+                    device_monitor.update_device(&current_mic_name);
+                    mic_stream = Some(new_stream);
+                    silence_start = None;
+                    silence_notified = false;
+
+                    eprintln!(
+                        "[minutes] Mic switched: {} → {}",
+                        old, current_mic_name
+                    );
+                    send_device_change_notification(&old, &current_mic_name);
+
+                    crate::events::append_event(crate::events::MinutesEvent::DeviceChanged {
+                        old_device: old,
+                        new_device: current_mic_name.clone(),
+                    });
+                }
+                None => {
+                    tracing::error!(
+                        "could not reconnect to any audio device — stopping recording"
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
+    // Stop and finalize
+    drop(mic_stream);
+    drop(_loopback_stream);
+
+    let total_samples = sample_count.load(Ordering::Relaxed);
+    let duration_secs = total_samples as f64 / 16000.0;
+    tracing::info!(
+        samples = total_samples,
+        duration_secs = format!("{:.1}", duration_secs),
+        "dual-stream capture stopped"
+    );
+
+    // Finalize the WAV file
+    let mut guard = writer.lock().unwrap();
+    if let Some(w) = guard.take() {
+        w.finalize()
+            .map_err(|e| CaptureError::Io(std::io::Error::other(format!("WAV finalize: {}", e))))?;
+    }
+
+    // Set restrictive permissions on the recording
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(output_path, std::fs::Permissions::from_mode(0o600)).ok();
+    }
+
+    eprintln!(
+        "[minutes] Captured {} samples ({:.1}s), peak audio level during recording: {}",
+        total_samples,
+        duration_secs,
+        AUDIO_LEVEL.load(Ordering::Relaxed)
+    );
+
+    if total_samples == 0 {
+        return Err(CaptureError::EmptyRecording);
+    }
+
+    Ok(())
 }
 
 /// List available audio input devices (for diagnostics / `minutes setup`).
