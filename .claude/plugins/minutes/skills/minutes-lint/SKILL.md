@@ -4,7 +4,7 @@ description: Health-check your meeting knowledge for contradictions, stale commi
 user_invocable: true
 ---
 
-# /minutes lint
+# /minutes-lint
 
 Run a consistency check across all meetings to find decision conflicts and stale commitments.
 
@@ -49,7 +49,7 @@ If no conflicts and no stale commitments, say: "No decision conflicts or stale c
 
 ## When to suggest next steps
 
-- If there are decision conflicts: suggest running `/minutes debrief` on the most recent conflicting meeting, or `/minutes search "{topic}"` to review the full decision history
+- If there are decision conflicts: suggest running `/minutes-debrief` on the most recent conflicting meeting, or `/minutes-search "{topic}"` to review the full decision history
 - If there are stale commitments: suggest the user update the action item status in the meeting file, or bring it up in the next meeting with that person
 - If the user wants to dig deeper into a specific person's commitments: suggest `minutes commitments --person "{name}"`
 

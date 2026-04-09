@@ -4,7 +4,7 @@ description: Start or stop recording a meeting, call, or voice memo. Use this wh
 user_invocable: true
 ---
 
-# /minutes record
+# /minutes-record
 
 Record audio from the microphone, transcribe it locally with whisper.cpp, and save as searchable markdown.
 

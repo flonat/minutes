@@ -22,7 +22,7 @@ Minutes becomes ambient memory — every thought you have, anywhere, on any devi
 4. **Sync folder inbox** — iCloud Drive (macOS default), Dropbox, Google Drive, Syncthing, or any folder sync. Configurable in `minutes setup`
 5. **SessionStart hook upgrade** — Surfaces recent voice memos (last 3 days, max 5) alongside today's meetings
 6. **`recent_ideas` MCP resource** — Returns voice memos from last 14 days, frontmatter-only scan
-7. **`/minutes ideas` Claude Code skill** — Interactive recall of recent voice memos
+7. **`/minutes-ideas` Claude Code skill** — Interactive recall of recent voice memos
 
 ### Cherry-Picks (3)
 
@@ -61,7 +61,7 @@ markdown.rs (with device/source frontmatter)
        └──→ SessionStart hook (next Claude session)
 ```
 
-### Deferred (TODOS.md)
+### Deferred (ROADMAP.md)
 
 - Full Ambient Memory: LLM classification, intent extraction on memos (P2)
 - Tray menu voice memo count, QMD auto-registration (minor, add during implementation)

@@ -4,7 +4,7 @@ description: Extract facts from meetings and update your knowledge base — pers
 user_invocable: true
 ---
 
-# /minutes ingest
+# /minutes-ingest
 
 Process meetings through the knowledge extraction pipeline to update person profiles, append to the knowledge log, and maintain the index.
 

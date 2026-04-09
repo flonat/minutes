@@ -4,7 +4,7 @@ description: Verify that Minutes is properly set up and working — model downlo
 user_invocable: true
 ---
 
-# /minutes verify
+# /minutes-verify
 
 Run a health check on the Minutes installation to confirm everything is working.
 

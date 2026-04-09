@@ -1,6 +1,14 @@
 # Interactive Skills Ecosystem
 
-> Design doc promoted from CEO plan review on 2026-03-19
+> Design doc promoted from CEO plan review on 2026-03-19.
+>
+> **Status (as of v0.8.0):** this doc captures the original design thinking
+> behind the interactive skill pattern. The plugin has since expanded to 18
+> skills — adding `/minutes-brief`, `/minutes-mirror`, `/minutes-tag`, and
+> `/minutes-graph` to close the proactive / coaching / intelligence gaps that
+> this doc only hinted at. **For the current skill catalog see `README.md` and
+> `plugin.json` — they are the source of truth.** Everything below reflects
+> the March 2026 snapshot and should be read as history, not spec.
 
 ## Problem
 
@@ -20,7 +28,7 @@ The best meeting companion feels like a chief of staff who never forgets anythin
 
 ### New Interactive Skills
 
-**`/minutes prep`** — Interactive meeting preparation
+**`/minutes-prep`** — Interactive meeting preparation
 - Ask who you're meeting with (push back on vague answers)
 - Search all past meetings with them
 - Build relationship brief: meeting history, recurring topics with trends, open commitments in both directions
@@ -29,7 +37,7 @@ The best meeting companion feels like a chief of staff who never forgets anythin
 - Save `.prep.md` to `~/.minutes/preps/` for debrief pickup
 - Three-beat closing ritual
 
-**`/minutes debrief`** — Post-meeting analysis
+**`/minutes-debrief`** — Post-meeting analysis
 - Auto-detect most recent recording
 - Check for matching `.prep.md` file
 - If prep exists: compare outcomes to intentions ("You wanted to resolve pricing. Did you?")
@@ -38,7 +46,7 @@ The best meeting companion feels like a chief of staff who never forgets anythin
 - Mark intents as resolved/open
 - Three-beat closing ritual with next-skill nudge
 
-**`/minutes weekly`** — Weekly synthesis and forward planning
+**`/minutes-weekly`** — Weekly synthesis and forward planning
 - Scan all recordings from the past week
 - Cross-reference themes across meetings
 - Surface decision evolution arcs (VOLATILE / STABLE / CONFLICTING)
@@ -49,11 +57,11 @@ The best meeting companion feels like a chief of staff who never forgets anythin
 
 ### Upgraded Existing Skills
 
-**`/minutes recap`** — Now interactive
+**`/minutes-recap`** — Now interactive
 - Surfaces conflicts between meetings ("Meeting A decided X, Meeting B discussed Y")
 - Asks follow-up: "Want me to dig into that conflict?"
 
-**`/minutes search`** — Now coaching
+**`/minutes-search`** — Now coaching
 - Pushes back on vague queries: "What specifically are you trying to find out?"
 - Suggests search strategies based on query type
 
@@ -74,13 +82,13 @@ The best meeting companion feels like a chief of staff who never forgets anythin
 ┌─────────────────────────────────────────┐
 │ Interactive Skills Layer                 │
 │                                          │
-│ /minutes prep ──→ .prep.md file         │
+│ /minutes-prep ──→ .prep.md file         │
 │       │                                  │
 │       ▼                                  │
-│ /minutes debrief ←── .prep.md           │
+│ /minutes-debrief ←── .prep.md           │
 │       │                                  │
 │       ▼                                  │
-│ /minutes weekly (synthesizes all)        │
+│ /minutes-weekly (synthesizes all)        │
 │                                          │
 │ PostToolUse hook (consistency + alert)   │
 │ Upgraded: recap, search, analyst         │
@@ -98,15 +106,15 @@ The best meeting companion feels like a chief of staff who never forgets anythin
 ### State Convention
 
 Prep files: `~/.minutes/preps/YYYY-MM-DD-{person-slug}.prep.md`
-- Created by `/minutes prep`
-- Read by `/minutes debrief` (matched by date + attendee)
-- Scanned by `/minutes weekly` (unresolved = prepped but not debriefed)
+- Created by `/minutes-prep`
+- Read by `/minutes-debrief` (matched by date + attendee)
+- Scanned by `/minutes-weekly` (unresolved = prepped but not debriefed)
 - Stale after 48 hours (ignored by debrief)
 - Permissions: `0600` (sensitive content)
 
-### Deferred (TODOS.md)
+### Deferred (ROADMAP.md)
 
-- Calendar bridge for `/minutes prep` (P2)
+- Calendar bridge for `/minutes-prep` (P2)
 - Proactive meeting reminders via SessionStart hook (P2)
 - Open source interactive skill template (P3)
 

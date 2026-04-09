@@ -4,7 +4,7 @@ description: Guided first-time setup for Minutes — download whisper model, cre
 user_invocable: true
 ---
 
-# /minutes setup
+# /minutes-setup
 
 Walk the user through first-time Minutes setup, step by step.
 

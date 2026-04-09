@@ -1,7 +1,7 @@
 # Interactive Skill Template
 
 > A template for building multi-phase interactive Claude Code skills.
-> Based on the patterns used in Minutes' `/minutes prep`, `/minutes debrief`, and `/minutes weekly`.
+> Based on the patterns used in Minutes' `/minutes-prep`, `/minutes-debrief`, and `/minutes-weekly`.
 > Inspired by [gstack](https://github.com/garrytan/gstack) `/office-hours` by Garry Tan.
 
 ## What makes an interactive skill different
@@ -194,6 +194,8 @@ The convention:
 ## Real examples
 
 See these skills in the Minutes plugin for working implementations:
-- [`/minutes prep`](/.claude/plugins/minutes/skills/minutes-prep/SKILL.md) — 180 lines, 5 phases, calendar auto-detect + relationship brief
-- [`/minutes debrief`](/.claude/plugins/minutes/skills/minutes-debrief/SKILL.md) — 150 lines, prep comparison + decision evolution
-- [`/minutes weekly`](/.claude/plugins/minutes/skills/minutes-weekly/SKILL.md) — 161 lines, cross-meeting synthesis + forward planning
+- [`/minutes-prep`](/.claude/plugins/minutes/skills/minutes-prep/SKILL.md) — 5 phases, calendar auto-detect + relationship brief
+- [`/minutes-debrief`](/.claude/plugins/minutes/skills/minutes-debrief/SKILL.md) — prep comparison + decision evolution
+- [`/minutes-weekly`](/.claude/plugins/minutes/skills/minutes-weekly/SKILL.md) — cross-meeting synthesis + forward planning
+- [`/minutes-brief`](/.claude/plugins/minutes/skills/minutes-brief/SKILL.md) — fast hook-fireable briefing (v0.8.0)
+- [`/minutes-mirror`](/.claude/plugins/minutes/skills/minutes-mirror/SKILL.md) — self-coaching from transcripts with bundled metric-counting script (v0.8.0)

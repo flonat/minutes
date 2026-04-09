@@ -10,7 +10,7 @@ allowed-tools:
   - AskUserQuestion
 ---
 
-# /minutes ideas — Recent Voice Memos & Ideas
+# /minutes-ideas — Recent Voice Memos & Ideas
 
 Surface voice memos and ideas captured from any device in the last 14 days.
 This is the recall layer for the cross-device ghost context pipeline.

@@ -4,7 +4,7 @@ description: Add a note to the current recording or annotate a past meeting. Use
 user_invocable: true
 ---
 
-# /minutes note
+# /minutes-note
 
 Add a timestamped note during a recording, or annotate a past meeting.
 
