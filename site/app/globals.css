@@ -3,9 +3,9 @@
 @tailwind utilities;
 
 :root {
-  --font-display: "Instrument Serif", "Iowan Old Style", "Palatino Linotype", serif;
-  --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "Geist Mono", "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace;
+  --font-display: var(--font-instrument-serif), "Iowan Old Style", "Palatino Linotype", serif;
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace;
   --bg: #f8f4ed;
   --bg-elevated: #efebe2;
   --bg-hover: #e8e2d8;
