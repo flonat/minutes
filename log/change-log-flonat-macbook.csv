@@ -1,0 +1,10 @@
+timestamp,tool,file_path,action,details
+2026-04-09 23:04:40,Edit,/Users/florianburnat/Task-Management/packages/minutes/crates/core/src/config.rs,modified,
+2026-04-09 23:04:44,Edit,/Users/florianburnat/Task-Management/packages/minutes/crates/core/src/config.rs,modified,
+2026-04-09 23:04:52,Edit,/Users/florianburnat/Task-Management/packages/minutes/crates/core/src/jobs.rs,modified,
+2026-04-09 23:04:59,Edit,/Users/florianburnat/Task-Management/packages/minutes/crates/core/src/jobs.rs,modified,
+2026-04-09 23:05:13,Edit,/Users/florianburnat/Task-Management/packages/minutes/crates/core/src/jobs.rs,modified,
+2026-04-09 23:05:35,Edit,/Users/florianburnat/Task-Management/packages/minutes/crates/core/src/jobs.rs,modified,
+2026-04-09 23:07:14,Bash,-,executed,"export CXXFLAGS=""-I$(xcrun --show-sdk-path)/usr/include/c++/v1"" && cargo check -p minutes-core --no-default-features 2>&1 | tail -20"
+2026-04-09 23:07:19,Bash,-,executed,git add crates/core/src/config.rs crates/core/src/jobs.rs && git rebase --continue
+2026-04-09 23:07:28,Bash,-,executed,git push flonat main --force-with-lease 2>&1
